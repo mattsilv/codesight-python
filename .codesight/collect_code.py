@@ -157,13 +157,35 @@ def build_exclusion_patterns(
             'test_*.py',
         ])
 
-    # Add large data file patterns
+    # Add data file exclusions
     standard_excludes.extend([
+        # Data files - standard database formats
         '*.csv',
+        '*.tsv',
+        '*.db',
+        '*.sqlite',
+        '*.sql',
+        # Data files - serialization formats
         '*.json',
         '*.xml',
         '*.yaml',
         '*.yml',
+        # Data files - binary formats
+        '*.zip',
+        '*.gz',
+        '*.tar',
+        '*.rar',
+        '*.7z',
+        '*.dat',
+        '*.bin',
+        # Data files - scientific computing
+        '*.npy',
+        '*.npz',
+        '*.pkl',
+        '*.pickle',
+        '*.parquet',
+        '*.h5',
+        '*.hdf5',
     ])
     
     # ALWAYS exclude the output file to prevent recursive processing

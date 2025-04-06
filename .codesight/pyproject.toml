@@ -1,6 +1,6 @@
 [project]
 name = "codesight"
-version = "0.1.7"
+version = "0.1.8"
 description = "Analyze code with LLMs"
 requires-python = ">=3.9"
 dependencies = [

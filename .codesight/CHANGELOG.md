@@ -1,5 +1,18 @@
 # CodeSight Python Changelog
 
+## v0.1.8 (2025-04-06)
+
+### Added
+- New command `cs -t` or `cs --tokens` to show top files by token count
+- Comprehensive table showing files and directories with highest token usage
+- Percentage breakdown of token usage across the project
+- Better token optimization with expanded exclusion patterns
+
+### Changed
+- Improved file exclusion patterns to automatically ignore data files
+- Added extensive list of data file extensions to global exclusions
+- Enhanced visibility into token usage to help users optimize their projects
+
 ## v0.1.7 (2025-04-06)
 
 ### Added

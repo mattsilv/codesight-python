@@ -12,6 +12,9 @@ import subprocess
 import urllib.request
 from urllib.error import URLError
 import importlib.util
+import re
+from operator import itemgetter
+from collections import defaultdict
 
 # Import version from _version.py
 script_dir = Path(__file__).parent.parent
@@ -105,6 +108,8 @@ def main():
                         help='Create or edit config file')
     parser.add_argument('-i', '--init', action='store_true',
                         help='Initialize CodeSight in the current project')
+    parser.add_argument('-t', '--tokens', action='store_true',
+                        help='Show top files by token count to identify optimization opportunities')
     parser.add_argument('--no-venv', action='store_true',
                         help='Skip virtual environment activation')
     parser.add_argument('-v', '--version', action='store_true',
@@ -120,6 +125,103 @@ def main():
     # Paths
     script_dir = Path(__file__).parent.parent
     current_dir = Path.cwd()
+    
+    # Handle token analysis if requested
+    if args.tokens:
+        # Use configured directory if none specified and config has a default
+        directory = args.directory
+        
+        # Check for project-specific config
+        project_config_path = current_dir / '.codesight-config.json'
+        global_config_path = script_dir / '.csconfig.json'
+        config_path = project_config_path if project_config_path.exists() else global_config_path
+        config = load_config(config_path)
+        
+        if directory == '.' and config.get('default_directory'):
+            directory = config.get('default_directory')
+            
+        print(f"Analyzing token usage in {directory}...")
+        print("This may take a moment for large projects...")
+        
+        # Check for missing dependencies before running
+        try:
+            import tiktoken
+        except ImportError:
+            print("\nMissing required dependency: tiktoken")
+            if auto_install_dependencies(["tiktoken"]):
+                print("✅ Successfully installed tiktoken.")
+                try:
+                    import tiktoken
+                except ImportError:
+                    print("⚠️ Failed to import tiktoken even after installation.")
+                    print("Please try again after restarting the script.")
+                    sys.exit(1)
+            else:
+                print("⚠️ Failed to install dependencies automatically.")
+                print("Please install them manually and try again.")
+                sys.exit(1)
+                
+        # Run token analysis
+        results = analyze_token_usage(directory)
+        
+        if not results:
+            print("Failed to analyze token usage.")
+            sys.exit(1)
+            
+        # Display results in a nicely formatted table
+        total = results['total_tokens']
+        processed = results['processed_files']
+        skipped = results['skipped_files']
+        
+        print("\n" + "=" * 70)
+        print(f"Token Usage Analysis - Top Files by Token Count")
+        print("=" * 70)
+        print(f"Total token count: {total:,}")
+        print(f"Files processed: {processed}")
+        print(f"Files skipped: {skipped}")
+        print("=" * 70)
+        
+        # Display top files table
+        print("\nTop files by token count:")
+        print("-" * 70)
+        print(f"{'File':<50} | {'Tokens':>8} | {'% of Total':>10}")
+        print("-" * 70)
+        
+        for file_path, tokens in results['file_tokens']:
+            percentage = (tokens / total) * 100 if total > 0 else 0
+            file_str = str(file_path)
+            if len(file_str) > 48:
+                file_str = "..." + file_str[-45:]
+            print(f"{file_str:<50} | {tokens:>8,} | {percentage:>9.2f}%")
+            
+        # Display top directories table
+        print("\nTop directories by token count:")
+        print("-" * 70)
+        print(f"{'Directory':<50} | {'Tokens':>8} | {'% of Total':>10}")
+        print("-" * 70)
+        
+        for dir_path, tokens in results['dir_tokens']:
+            percentage = (tokens / total) * 100 if total > 0 else 0
+            dir_str = str(dir_path) if str(dir_path) != "." else "(root)"
+            if len(dir_str) > 48:
+                dir_str = "..." + dir_str[-45:]
+            print(f"{dir_str:<50} | {tokens:>8,} | {percentage:>9.2f}%")
+            
+        print("\nNOTE: The following file types are automatically excluded to reduce token usage:")
+        print("- Database files (.db, .sqlite, .sql)")
+        print("- Compressed files (.zip, .gz, .tar, .rar, .7z)")
+        print("- Data files (.csv, .json, .xml, .yaml, .yml, .npy, .pkl, etc.)")
+        print("- Binary/image files (.jpg, .png, .pdf, .doc, etc.)")
+        print("\nTip: Add exclusion patterns to .gitignore to exclude more file types.")
+        print("\nTo customize exclusions further, use a project-specific config:")
+        print("  cs -c")
+        
+        # Check for updates at the end
+        update_info = check_for_updates()
+        if update_info and update_info['update_available']:
+            print(f"\n🔄 Update available: {update_info['current_version']} → {update_info['latest_version']}")
+            print("   Run 'pip install --upgrade codesight' to update.")
+        return
     
     # Handle initialization if requested
     if args.init:
@@ -468,6 +570,170 @@ def update_bug_description(script_dir, bug_description):
     
     # Use the temporary file
     temp_path.rename(bugfix_path)
+
+def analyze_token_usage(directory, limit=10):
+    """
+    Analyze token usage in files within a directory.
+    
+    Args:
+        directory: Path to the directory to analyze
+        limit: Maximum number of files to show in results
+        
+    Returns:
+        A tuple of (total_tokens, file_tokens) where:
+        - total_tokens is the total number of tokens across all files
+        - file_tokens is a list of (file_path, tokens) tuples sorted by token count
+    """
+    try:
+        # First, ensure tiktoken is available
+        try:
+            import tiktoken
+        except ImportError:
+            print("\nMissing required dependency: tiktoken")
+            print("Please install it with: pip install tiktoken")
+            sys.exit(1)
+            
+        from pathlib import Path
+        
+        # Use the same encoder as collect_code.py
+        encoder = tiktoken.get_encoding("cl100k_base")
+        
+        # Define exclusion patterns (same as in collect_code.py plus data files)
+        standard_excludes = [
+            # Hidden files and directories
+            r"^\.",
+            r"/\.",
+            # Version control
+            r"\.git/",
+            # Build artifacts
+            r"__pycache__/",
+            r"build/",
+            r"dist/",
+            r"\.egg-info/",
+            # Virtual environments
+            r"\.env/",
+            r"\.venv/",
+            r"venv/",
+            r"env/",
+            # Data files (global exclusions)
+            r"\.csv$",
+            r"\.tsv$",
+            r"\.sqlite$",
+            r"\.db$",
+            r"\.sql$",
+            r"\.zip$",
+            r"\.gz$",
+            r"\.tar$",
+            r"\.rar$",
+            r"\.7z$",
+            r"\.dat$",
+            r"\.bin$",
+            r"\.npy$",
+            r"\.npz$",
+            r"\.pkl$",
+            r"\.pickle$",
+            r"\.parquet$",
+            r"\.h5$",
+            r"\.hdf5$",
+            r"\.json$",
+            r"\.xml$",
+            r"\.yaml$",
+            r"\.yml$",
+            # Images
+            r"\.jpg$",
+            r"\.jpeg$",
+            r"\.png$",
+            r"\.gif$",
+            r"\.bmp$",
+            r"\.svg$",
+            r"\.ico$",
+            # Other binary formats
+            r"\.pdf$",
+            r"\.doc$",
+            r"\.docx$",
+            r"\.xls$",
+            r"\.xlsx$",
+            r"\.ppt$",
+            r"\.pptx$",
+        ]
+        
+        # Compile all patterns
+        exclude_patterns = [re.compile(pattern) for pattern in standard_excludes]
+        
+        # Get list of all files
+        project_dir = Path(directory).resolve()
+        all_files = list(project_dir.rglob("*"))
+        
+        # Process files
+        file_tokens = []
+        dir_tokens = defaultdict(int)
+        total_tokens = 0
+        processed_files = 0
+        skipped_files = 0
+        
+        for file_path in all_files:
+            # Skip directories and non-files
+            if not file_path.is_file():
+                continue
+                
+            # Get relative path for easier display
+            rel_path = file_path.relative_to(project_dir)
+            str_path = str(rel_path)
+            
+            # Check exclusion patterns
+            should_exclude = False
+            for pattern in exclude_patterns:
+                if pattern.search(str_path):
+                    should_exclude = True
+                    skipped_files += 1
+                    break
+                    
+            if should_exclude:
+                continue
+                
+            # Skip binary files (rough check)
+            try:
+                # Try to read the first 1024 bytes as text
+                with open(file_path, 'r', encoding='utf-8', errors='strict') as f:
+                    f.read(1024)
+            except (UnicodeDecodeError, IsADirectoryError):
+                skipped_files += 1
+                continue
+                
+            # Read file and count tokens
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                    tokens = len(encoder.encode(content))
+                    file_tokens.append((rel_path, tokens))
+                    
+                    # Update parent directory stats
+                    parent_dir = rel_path.parent
+                    dir_tokens[parent_dir] += tokens
+                    
+                    total_tokens += tokens
+                    processed_files += 1
+            except Exception as e:
+                skipped_files += 1
+                continue
+                
+        # Sort files by token count (descending)
+        file_tokens.sort(key=itemgetter(1), reverse=True)
+        
+        # Sort directories by token count (descending)
+        dir_tokens_list = [(d, t) for d, t in dir_tokens.items()]
+        dir_tokens_list.sort(key=itemgetter(1), reverse=True)
+        
+        return {
+            'total_tokens': total_tokens,
+            'processed_files': processed_files,
+            'skipped_files': skipped_files,
+            'file_tokens': file_tokens[:limit],
+            'dir_tokens': dir_tokens_list[:limit]
+        }
+    except Exception as e:
+        print(f"Error analyzing token usage: {e}")
+        return None
 
 if __name__ == "__main__":
     main()

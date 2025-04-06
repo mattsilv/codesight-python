@@ -1,7 +1,7 @@
 # CodeSight Development Guide
 
 ## Version Information
-Current version: 0.1.7
+Current version: 0.1.8
 
 ## Project Overview
 CodeSight is a tool for collecting and formatting code from a project to be used with LLMs like Claude. It:
@@ -10,7 +10,15 @@ CodeSight is a tool for collecting and formatting code from a project to be used
 3. Optimizes token usage by prioritizing recent files
 4. Outputs the formatted code to both a file and clipboard
 
-## Recent Improvements (v0.1.7)
+## Recent Improvements (v0.1.8)
+- New command `cs -t` or `cs --tokens` to show top files by token count
+- Comprehensive table showing files and directories with highest token usage
+- Percentage breakdown of token usage across the project
+- Improved file exclusion patterns to automatically ignore data files
+- Added extensive list of data file extensions to global exclusions
+- Enhanced visibility into token usage to help users optimize their projects
+
+## Previous Improvements (v0.1.7)
 - Automatic dependency installation during initialization and runtime
 - Support for multiple package managers (pip, python -m pip, uv)
 - Smart detection of virtual environments and installation context
