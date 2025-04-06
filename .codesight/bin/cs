@@ -1,9 +1,37 @@
 #!/bin/bash
 # CodeSight quick launcher
 
-# Determine script location 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+# Find the real path of the script, following symlinks
+# This ensures we always find the actual installation location
+
+# First try the readlink method (Linux, some macOS)
+if command -v readlink &> /dev/null && [[ $(uname) != "Darwin" || $(readlink -f / 2>/dev/null) ]]; then
+    # readlink -f works
+    REAL_SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+else
+    # For macOS without readlink -f support
+    # Resolve $SOURCE until the file is no longer a symlink
+    SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "$SOURCE" ]; do
+        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+        SOURCE="$(readlink "$SOURCE")"
+        # If $SOURCE was a relative symlink, resolve it relative to the path where the symlink file was located
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    REAL_SCRIPT_PATH="$SOURCE"
+fi
+
+# Get the real script directories
+SCRIPT_DIR="$( cd -P "$( dirname "$REAL_SCRIPT_PATH" )" && pwd )"
 CODESIGHT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Verify that the script directory is valid
+if [ ! -f "$SCRIPT_DIR/cs.py" ]; then
+    echo "Error: Cannot find cs.py in $SCRIPT_DIR"
+    echo "This usually happens when the symlink is correct but the source files moved"
+    echo "Please reinstall CodeSight or update your symlink"
+    exit 1
+fi
 
 # Check if virtual environment exists
 VENV_DIR="$CODESIGHT_DIR/.venv"
@@ -27,6 +55,16 @@ if [ ! -d "$VENV_DIR" ]; then
 else
     # Activate existing environment
     source "$VENV_DIR/bin/activate"
+fi
+
+# Print debugging info if requested
+if [[ "$*" == *"--debug"* ]]; then
+    echo "CodeSight Debug Info:"
+    echo "  Real script path: $REAL_SCRIPT_PATH"
+    echo "  Script directory: $SCRIPT_DIR"
+    echo "  CodeSight directory: $CODESIGHT_DIR"
+    echo "  Virtual env: $VENV_DIR"
+    echo "  Python script: $SCRIPT_DIR/cs.py"
 fi
 
 # Run the CS command
