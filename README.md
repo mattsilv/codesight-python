@@ -23,14 +23,17 @@ pip install codesight-python
 For the best development experience, use `uv` to manage your virtual environment:
 
 ```bash
+# Install uv (if not already installed)
+pip install uv
+
 # Create and activate virtual environment
 uv venv
 source .venv/bin/activate  # On Unix/Mac
 # OR 
 .venv\Scripts\activate     # On Windows
 
-# Install dependencies
-uv pip install -r requirements.txt
+# Install dependencies directly (no requirements.txt needed)
+uv pip install tiktoken openai pytest typer more-itertools
 ```
 
 ## Usage
