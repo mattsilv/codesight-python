@@ -18,25 +18,52 @@ cs -i
 cs
 ```
 
+### Installation Details
+
+The install script will place CodeSight in a global location to make it available system-wide:
+
+1. **Installation Locations** (in order of preference):
+   - `/usr/local/bin` (if you have write permissions)
+   - `/opt/homebrew/bin` (on Apple Silicon Macs with Homebrew)
+   - `~/bin` (in your home directory, created if it doesn't exist)
+
+2. **What Gets Installed:**
+   - `cs` - The main command for using CodeSight
+   - `cs-dev` - Used only for developing CodeSight itself
+
+3. **Verification:**
+   After installation, verify with:
+   ```bash
+   which cs      # Should show the installation path
+   cs --version  # Should show the current version
+   ```
+
 ## Core Workflows
 
 ### Use Case 1: Using CodeSight in Your Projects
 
 ```bash
-# First-time setup in a project
+# Global installation (one-time)
+git clone https://github.com/mattsilv/codesight-python.git
+cd codesight-python
+.codesight/bin/install.sh    # Installs to system-wide location
+
+# First-time setup in each project
 cd /your/project
-cs -i                   # Initialize project config and dependencies
+cs -i                        # Initialize project config and dependencies
 
 # Regular usage
-cs                      # Standard analysis with improvement prompt
-cs -b "Description"     # Analyze with bug-fixing prompt
-cs -c                   # Configure settings
+cs                           # Standard analysis with improvement prompt
+cs -b "Description"          # Analyze with bug-fixing prompt
+cs -c                        # Configure settings
 
-# Update CodeSight
+# Update CodeSight (when new versions are available)
 cd /path/to/codesight-python
 git pull
-.codesight/bin/install.sh
+.codesight/bin/install.sh    # Updates the global installation
 ```
+
+> **Note:** The `cs` command is installed globally in `/usr/local/bin`, `/opt/homebrew/bin`, or `~/bin`, but each project gets its own `.codesight` directory with project-specific settings and dependencies.
 
 ### Use Case 2: Developing CodeSight (Dogfooding Mode)
 
@@ -114,8 +141,21 @@ When a new version is available, you'll see an update notification after running
 
 - **Missing dependencies**: Automatically fixed on run
 - **Nested virtual environments**: Automatically detected and handled
-- **Path issues**: Use `cs --debug` to verify installation paths
-- **Uninstalling CodeSight**: Run `.codesight/bin/uninstall.sh` from any project where it's installed
+- **Command not found**: After installation, you may need to open a new terminal window or run `source ~/.bashrc` or `source ~/.zshrc` if the installer added `~/bin` to your PATH
+- **Permission issues during installation**: If you don't have write permissions to `/usr/local/bin`, the installer will fall back to `~/bin`
+- **Path issues**: Use `cs --debug` to verify installation paths and see where CodeSight is installed
+- **Uninstalling CodeSight**: Run `.codesight/bin/uninstall.sh` from any project where it's installed or directly from the repository
+
+If CodeSight isn't in your PATH after installation, verify installation with:
+```bash
+# Verify which bin directory was used
+ls -la /usr/local/bin/cs     # Standard location
+ls -la /opt/homebrew/bin/cs  # Homebrew on Apple Silicon
+ls -la ~/bin/cs              # Fallback location
+
+# Check if ~/bin is in your PATH (if that's where it was installed)
+echo $PATH | grep -q "$HOME/bin" && echo "~/bin is in PATH" || echo "~/bin is NOT in PATH"
+```
 
 ## License
 

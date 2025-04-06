@@ -11,9 +11,14 @@ from pathlib import Path
 import subprocess
 import urllib.request
 from urllib.error import URLError
+import importlib.util
 
-# Version information
-__version__ = "0.1.3"  # Following semantic versioning
+# Import version from _version.py
+script_dir = Path(__file__).parent.parent
+spec = importlib.util.spec_from_file_location("_version", script_dir / "_version.py")
+version_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(version_module)
+__version__ = version_module.__version__
 
 def check_for_updates():
     """Check GitHub for newer versions of CodeSight and return update info if available"""

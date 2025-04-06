@@ -1,5 +1,35 @@
 # CodeSight Python Changelog
 
+## v0.1.4 (2025-04-06)
+
+### Added
+- Centralized version management with single source of truth
+- Automatic version updating in documentation
+
+### Changed
+- Improved installation and upgrade process
+- Better version detection during installation
+- Enhanced documentation for clear installation instructions
+
+### Fixed
+- Version synchronization across all components
+
+## v0.1.3 (2025-04-06)
+
+### Added
+- Better path resolution in uninstallation script
+- Protection for development repositories during uninstallation
+
+### Fixed
+- Fixed uninstallation path issues
+- Improved documentation for uninstall commands
+
+## v0.1.2 (2025-04-06)
+
+### Changed
+- Updated documentation for global installation locations
+- Improved error handling during installation
+
 ## v0.1.1 (2025-04-06)
 
 ### Added

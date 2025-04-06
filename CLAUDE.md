@@ -1,7 +1,7 @@
 # CodeSight Development Guide
 
 ## Version Information
-Current version: 0.1.2
+Current version: 0.1.4
 
 ## Project Overview
 CodeSight is a tool for collecting and formatting code from a project to be used with LLMs like Claude. It:
@@ -10,10 +10,12 @@ CodeSight is a tool for collecting and formatting code from a project to be used
 3. Optimizes token usage by prioritizing recent files
 4. Outputs the formatted code to both a file and clipboard
 
-## Recent Improvements (v0.1.2)
-- Added precise type hints throughout the codebase
-- Used dataclasses for structured metadata instead of nested dictionaries
-- Improved module structure with constants and better docstrings
+## Recent Improvements (v0.1.4)
+- Centralized version management with single source of truth in _version.py
+- Automatic version updating in documentation files
+- Improved installation and upgrade processes
+- Better version detection during installation
+- Enhanced uninstallation path resolution and protection for development repositories
 - Fixed virtual environment detection and handling
 - Added .gitignore checking and automatic updates
 - Implemented version checking to notify users of updates
@@ -29,7 +31,8 @@ cd /Users/m/gh/codesight-python && python -m pytest -xvs
 - **Gitignore management**: Added warnings and fixes for projects that don't properly exclude CodeSight files
 
 ## Creating a New Release
-1. Update `__version__` in `/Users/m/gh/codesight-python/.codesight/bin/cs.py`
-2. Update version in README.md and CLAUDE.md
-3. Create a release tag in GitHub using the version number (e.g., v0.2.0)
-4. Update release notes with all changes since the previous version
+1. Update `__version__` in `/Users/m/gh/codesight-python/.codesight/_version.py`
+2. Run `.codesight/bin/version.sh` to automatically update README.md
+3. Update CLAUDE.md with recent improvements 
+4. Create a release tag in GitHub using the version number (e.g., v0.1.4)
+5. Update release notes with all changes since the previous version

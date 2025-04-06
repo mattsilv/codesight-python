@@ -126,8 +126,8 @@ if [ ! -x "$INSTALL_DIR/cs" ]; then
     exit 1
 fi
 
-# Extract version number from cs.py
-VERSION=$(grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' "$SCRIPT_DIR/cs.py" | tr -d '"')
+# Extract version number using the version.sh script
+VERSION=$("$SCRIPT_DIR/version.sh")
 echo "CodeSight v${VERSION} installed successfully to $INSTALL_DIR/cs"
 echo ""
 echo "Usage examples:"
