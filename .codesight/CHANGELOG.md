@@ -1,5 +1,21 @@
 # CodeSight Python Changelog
 
+## v0.1.9 (2025-04-06)
+
+### Added
+- Comprehensive test suite to ensure CodeSight reliability
+- Pre-commit hook with isolated environment testing
+- New update command (`cs -u`) to update CodeSight globally
+
+### Changed
+- Refactored codebase for easier testing and maintenance
+- Split monolithic cs.py into logical components
+- Improved import handling for better cross-environment compatibility
+
+### Fixed
+- Fixed dependency handling in various Python environments
+- Improved error handling for more reliable operation
+
 ## v0.1.8 (2025-04-06)
 
 ### Added

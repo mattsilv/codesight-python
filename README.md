@@ -2,7 +2,7 @@
 
 A Python utility for collecting and formatting code for LLMs, optimized for performance on M-series Macs.
 
-**Version: 0.1.8**
+**Version: 0.1.9**
 
 ## Installation
 
@@ -30,6 +30,7 @@ cs -i                  # Initialize CodeSight in your project
 cs                     # Run analysis with standard prompt
 cs -b "Bug description" # Run with bug-fixing prompt
 cs -t                  # Analyze token usage (show top files by token count)
+cs -u                  # Update CodeSight to the latest version
 ```
 
 For detailed documentation and usage instructions, see [.codesight/README.md](.codesight/README.md).
