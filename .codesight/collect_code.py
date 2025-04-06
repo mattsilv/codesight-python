@@ -28,11 +28,17 @@ def parse_arguments() -> argparse.Namespace:
                        help='Additional patterns to exclude')
     parser.add_argument('--include-tests', action='store_true', 
                        help='Include test directories')
+    parser.add_argument('--dogfood', action='store_true',
+                       help='Include .codesight directory (for CodeSight development)')
+    parser.add_argument('--output-file', default='.codesight/llm.txt',
+                       help='Output file path (default: .codesight/llm.txt)')
+    parser.add_argument('--prompt', choices=['improvement', 'bugfix'], default='improvement',
+                       help='Type of prompt to use (default: improvement)')
     return parser.parse_args()
 
 
 def build_exclusion_patterns(project_root: Path, user_excludes: List[str], 
-                           include_tests: bool) -> pathspec.PathSpec:
+                           include_tests: bool, include_codesight: bool) -> pathspec.PathSpec:
     """Build patterns for excluding files from collection."""
     # Start with .gitignore patterns
     patterns = ['.git']  # Always ignore .git
@@ -58,6 +64,10 @@ def build_exclusion_patterns(project_root: Path, user_excludes: List[str],
         '*.log',
         '.DS_Store',
     ]
+    
+    # By default, exclude .codesight/ directory unless dogfood mode is on
+    if not include_codesight:
+        standard_excludes.append('.codesight/')
 
     # Add test directories unless explicitly included
     if not include_tests:
@@ -224,7 +234,8 @@ async def process_file(file_path: Path, mtime: float, project_root: Path,
 
 async def build_output(group_sort_info: List[Dict[str, Any]], 
                      project_root: Path, 
-                     token_limit: int) -> str:
+                     token_limit: int,
+                     prompt_type: str = 'improvement') -> str:
     """Optimized output builder using async for file reading operations"""
     output_parts = []
 
@@ -246,8 +257,23 @@ async def build_output(group_sort_info: List[Dict[str, Any]],
 
     output_parts.append("# --- End Code Structure Overview ---\n")
 
-    # Add prompt template
-    prompt_template = """
+    # Add prompt from template file based on selected prompt type
+    prompt_filename = f"{prompt_type}.md"
+    
+    # When in dogfood mode, we need to check the script's directory
+    if Path(__file__).parent.name == '.codesight':
+        prompt_path = Path(__file__).parent / 'prompts' / prompt_filename
+    else:
+        # Standard path for normal usage
+        prompt_path = project_root / '.codesight' / 'prompts' / prompt_filename
+    
+    # Use the prompt file if it exists
+    if prompt_path.exists():
+        prompt_content = prompt_path.read_text(encoding='utf-8')
+        output_parts.append(prompt_content)
+    else:
+        # Fallback to default prompt if file doesn't exist
+        prompt_template = """
 You are an expert software engineer. Analyze the following codebase from my project.
 The goal is to [YOUR GOAL HERE - e.g., find bugs, suggest improvements, implement feature X]
 
@@ -256,7 +282,7 @@ Each file shows how recently it was modified to help you focus on recent changes
 
 Please provide your analysis with specific, actionable feedback.
 """
-    output_parts.append(prompt_template.strip())
+        output_parts.append(prompt_template.strip())
 
     # Add concatenated code files
     output_parts.append("\n# --- Start Code Files ---")
@@ -315,11 +341,21 @@ async def main_async() -> None:
     # Get project root directory
     project_root = Path(args.directory).resolve()
 
+    # Auto-detect if we're in the codesight project itself
+    is_codesight_project = False
+    if project_root.name == "codesight-python" or (project_root / '.codesight').is_dir() and len(list(project_root.glob('*'))) <= 2:
+        is_codesight_project = True
+        print("Auto-detected CodeSight project - enabling dogfood mode")
+    
+    # Use dogfood mode if explicitly enabled or auto-detected
+    dogfood_mode = args.dogfood or is_codesight_project
+
     # Build exclusion patterns
     exclusion_spec = build_exclusion_patterns(
         project_root,
         args.exclude,
-        args.include_tests
+        args.include_tests,
+        dogfood_mode
     )
 
     # Collect files (async)
@@ -328,8 +364,8 @@ async def main_async() -> None:
     # Sort directories and files by recency
     group_sort_info = prepare_sorted_groups(dirs_data)
 
-    # Build output (async)
-    final_output = await build_output(group_sort_info, project_root, args.token_limit)
+    # Build output (async) with selected prompt type
+    final_output = await build_output(group_sort_info, project_root, args.token_limit, args.prompt)
 
     # Count tokens
     encoder = tiktoken.get_encoding("cl100k_base")
@@ -337,11 +373,30 @@ async def main_async() -> None:
 
     # Copy to clipboard
     pyperclip.copy(final_output)
+    
+    # Save to output file, handling dogfood mode specially
+    output_file_path = args.output_file
+    
+    # If we're in dogfood mode and the path starts with .codesight/,
+    # don't add another .codesight/ prefix if we're already in that directory
+    if dogfood_mode and Path(__file__).parent.name == '.codesight' and output_file_path.startswith('.codesight/'):
+        # Remove the .codesight/ prefix to avoid nesting
+        output_file_path = output_file_path[len('.codesight/'):]
+    
+    output_file = Path(output_file_path)
+    # Make path absolute if it's not already
+    if not output_file.is_absolute():
+        output_file = Path(__file__).parent / output_file_path
+    
+    # Create directory if it doesn't exist
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(final_output, encoding='utf-8')
 
     # Print summary
     total_files = sum(len(group['files']) for group in group_sort_info)
     print(f"CodeSight: Processed {total_files} files ({tokens} tokens)")
     print(f"Content copied to clipboard!")
+    print(f"Output saved to {output_file}")
 
 
 def main() -> None:
