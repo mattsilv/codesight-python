@@ -1,5 +1,17 @@
 # CodeSight Python Changelog
 
+## v0.1.6 (2025-04-06)
+
+### Changed
+- Simplified dependency management to work with all Python environments
+- Improved cross-compatibility with different package managers (pip, uv)
+- More user-friendly error messages for missing dependencies
+
+### Fixed
+- Fixed installation errors on systems without pip available
+- Removed complex subprocess calls that could fail in certain environments
+- Better support for virtual environments
+
 ## v0.1.5 (2025-04-06)
 
 ### Added

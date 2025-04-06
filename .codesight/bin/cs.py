@@ -166,20 +166,24 @@ def main():
     cmd = f'python {collect_script} {directory} --prompt {prompt_type} {dogfood_flag}'
     
     # Check for required dependencies before running
-    try:
-        # Verify all dependencies are available before running
-        import_check = ['python', '-c', 'import tiktoken, pathspec, pyperclip, humanize']
-        subprocess.run(import_check, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError:
-        print("Missing required dependencies. Installing now...")
+    missing_deps = []
+    for module in ["tiktoken", "pathspec", "pyperclip", "humanize"]:
         try:
-            print("Installing dependencies...")
-            subprocess.run(['pip', 'install', 'tiktoken', 'pathspec', 'pyperclip', 'humanize', 'more-itertools'], 
-                          check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error installing dependencies: {e}")
-            print("Please run: pip install tiktoken pathspec pyperclip humanize more-itertools")
-            sys.exit(1)
+            __import__(module)
+        except ImportError:
+            missing_deps.append(module)
+    
+    # Give clear instructions if missing dependencies
+    if missing_deps:
+        print(f"\nMissing required dependencies: {', '.join(missing_deps)}")
+        print("\nPlease install the missing dependencies with your preferred package manager:")
+        print("  pip install " + " ".join(missing_deps))
+        print("  # or")
+        print("  python -m pip install " + " ".join(missing_deps))
+        print("  # or if you use uv")
+        print("  uv pip install " + " ".join(missing_deps))
+        print("\nThen run your command again.")
+        sys.exit(1)
     
     # Run the command
     print(f"Running: {cmd}")
@@ -226,37 +230,34 @@ def initialize_codesight(current_dir, script_dir):
     if not codesight_dir.exists():
         codesight_dir.mkdir(exist_ok=True)
     
-    # Install global dependencies required by CodeSight
-    try:
-        print("Checking for required dependencies...")
-        import_check = ['python', '-c', 'import tiktoken, pathspec, pyperclip, humanize']
-        subprocess.run(import_check, capture_output=True, text=True, check=True)
-        print("All required dependencies are installed.")
-    except subprocess.CalledProcessError:
-        print("Missing required dependencies. Installing now...")
+    # Try to import required dependencies directly
+    missing_deps = []
+    for module in ["tiktoken", "pathspec", "pyperclip", "humanize"]:
         try:
-            print("Installing dependencies...")
-            subprocess.run(['pip', 'install', 'tiktoken', 'pathspec', 'pyperclip', 'humanize', 'more-itertools', 'pytest', 'openai'], 
-                          check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error installing dependencies: {e}")
-            print("Please run: pip install tiktoken pathspec pyperclip humanize more-itertools pytest openai")
+            __import__(module)
+        except ImportError:
+            missing_deps.append(module)
     
-    # Check if local venv has all required dependencies
+    # Print simple instructions if dependencies are missing
+    if missing_deps:
+        print(f"\nMissing required dependencies: {', '.join(missing_deps)}")
+        print("\nPlease install the missing dependencies with your preferred package manager:")
+        print("  pip install " + " ".join(missing_deps))
+        print("  # or")
+        print("  python -m pip install " + " ".join(missing_deps))
+        print("  # or if you use uv")
+        print("  uv pip install " + " ".join(missing_deps))
+        print("\nThen run 'cs -i' again.")
+    
+    # We've already checked for dependencies directly at the Python level,
+    # so we don't need to do additional venv-specific checks.
+    # Just inform the user if using a venv
     venv_dir = current_dir / '.venv'
     if venv_dir.exists():
-        # We have a venv, let's make sure it has the required packages
-        try:
-            # Check for all required packages
-            import_check = ['python', '-c', 'import humanize, tiktoken, pathspec, pyperclip']
-            subprocess.run(import_check, cwd=current_dir, env=os.environ,
-                          capture_output=True, text=True, check=True)
-            print("Virtual environment already configured with required dependencies.")
-        except subprocess.CalledProcessError:
-            # Missing dependencies, install them
-            print("Installing required dependencies in the virtual environment...")
-            install_cmd = ['/bin/bash', '-c', f'source {venv_dir}/bin/activate && pip install tiktoken openai pytest typer more-itertools humanize pathspec pyperclip']
-            subprocess.run(install_cmd, cwd=current_dir, env=os.environ, shell=True)
+        print("\nVirtual environment detected at: " + str(venv_dir))
+        print("If you need to install packages in this venv, use:")
+        print(f"source {venv_dir}/bin/activate")
+        print("Then install any missing dependencies with your package manager.")
     
     # Check if .gitignore has .codesight exclusion
     if (current_dir / '.git').exists() and not check_gitignore_for_codesight(current_dir):
