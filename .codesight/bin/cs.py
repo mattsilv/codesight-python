@@ -18,6 +18,8 @@ def main():
                         help='Run in bug mode with optional description')
     parser.add_argument('-c', '--config', action='store_true',
                         help='Create or edit config file')
+    parser.add_argument('-i', '--init', action='store_true',
+                        help='Initialize CodeSight in the current project')
     parser.add_argument('--no-venv', action='store_true',
                         help='Skip virtual environment activation')
     
@@ -25,17 +27,27 @@ def main():
     
     # Paths
     script_dir = Path(__file__).parent.parent
-    config_path = script_dir / '.csconfig.json'
+    current_dir = Path.cwd()
+    
+    # Handle initialization if requested
+    if args.init:
+        initialize_codesight(current_dir, script_dir)
+        return
+    
+    # Look for project-specific config first, then fall back to global
+    project_config_path = current_dir / '.codesight-config.json'
+    global_config_path = script_dir / '.csconfig.json'
+    
+    config_path = project_config_path if project_config_path.exists() else global_config_path
     
     # Load or create config
     if args.config:
-        create_or_edit_config(config_path)
+        create_or_edit_config(config_path, is_project_config=config_path == project_config_path)
         return
     
     config = load_config(config_path)
     
     # Determine if we're in the CodeSight project
-    current_dir = Path.cwd()
     repo_root = find_repo_root(current_dir)
     is_codesight_project = is_in_codesight_project(repo_root)
     
@@ -47,13 +59,39 @@ def main():
     if args.bug is not None and args.bug:
         update_bug_description(script_dir, args.bug)
     
+    # Use configured directory if none specified and config has a default
+    directory = args.directory
+    if directory == '.' and config.get('default_directory'):
+        directory = config.get('default_directory')
+    
     # Construct command
     collect_script = script_dir / 'collect_code.py'
-    cmd = f'python {collect_script} {args.directory} --prompt {prompt_type} {dogfood_flag}'
+    cmd = f'python {collect_script} {directory} --prompt {prompt_type} {dogfood_flag}'
     
     # Run the command
     print(f"Running: {cmd}")
     os.system(cmd)
+    
+def initialize_codesight(current_dir, script_dir):
+    """Initialize CodeSight in the current project"""
+    print(f"Initializing CodeSight in {current_dir}...")
+    
+    # Create project config
+    config_path = current_dir / '.codesight-config.json'
+    
+    # Default project config
+    default_config = {
+        "default_directory": ".",
+        "always_dogfood": False,
+        "token_limit": 100000
+    }
+    
+    # Write project config
+    with open(config_path, 'w') as f:
+        json.dump(default_config, f, indent=2)
+    
+    print(f"Created project config at {config_path}")
+    print("You can now run 'cs' without arguments to analyze this project.")
 
 def find_repo_root(path):
     """Find the repository root by looking for .git directory"""
@@ -93,12 +131,22 @@ def load_config(config_path):
     
     return default_config
 
-def create_or_edit_config(config_path):
+def create_or_edit_config(config_path, is_project_config=False):
     """Create or edit the config file"""
     config = load_config(config_path)
     
     print("CodeSight Configuration:")
     print("========================")
+    print(f"Editing {'project-specific' if is_project_config else 'global'} configuration")
+    
+    # For project configs, allow setting default directory
+    if is_project_config:
+        default_dir = config.get('default_directory', '.')
+        new_dir = input(f"Default directory to analyze [{default_dir}]: ").strip()
+        if new_dir:
+            config['default_directory'] = new_dir
+        elif 'default_directory' not in config:
+            config['default_directory'] = default_dir
     
     # Update config interactively
     config['always_dogfood'] = input_yes_no(
@@ -116,6 +164,9 @@ def create_or_edit_config(config_path):
         json.dump(config, f, indent=2)
     
     print(f"\nConfiguration saved to {config_path}")
+    
+    if is_project_config:
+        print("To analyze this project, simply run 'cs' without arguments.")
 
 def input_yes_no(prompt, default):
     """Get yes/no input with default"""

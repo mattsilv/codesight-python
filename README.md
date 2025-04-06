@@ -131,21 +131,37 @@ This special mode will include the `.codesight` directory (normally excluded) wh
 For convenience, CodeSight provides a simple `cs` command that handles all the complexity:
 
 ```bash
-# Install the cs command globally (one-time setup)
-sudo .codesight/bin/install.sh
+# Install the cs command globally (one-time setup, no sudo needed in most cases)
+.codesight/bin/install.sh
 
-# Then use from anywhere
-cs                      # Analyze current directory
-cs -b "Bug description" # Analyze with bug mode and description
-cs -c                   # Configure settings
-cs path/to/project      # Analyze specific project
+# Setup for a specific project
+cd /path/to/your/project
+cs -i                   # Initialize project config
+
+# Then simply use:
+cs                      # Analyze project with one command!
 ```
 
-Features of the `cs` command:
-- Automatically handles virtual environment setup
-- Detects CodeSight project and enables dogfood mode
-- Configurable settings with `cs -c`
-- Quick bug analysis with `cs -b "Description of the bug"`
+### Advanced Usage
+
+```bash
+cs -b "Bug description" # Analyze with bug mode and description
+cs -c                   # Configure settings (global or project-specific)
+cs path/to/project      # Analyze a specific project
+```
+
+### Features of the `cs` Command
+
+- **Zero-argument operation**: Just type `cs` in your project
+- **Project-specific configuration**: Creates `.codesight-config.json` in your project
+- **Automatic environment management**: Creates and activates virtual environments
+- **Smart project detection**: Auto-detects CodeSight project for dogfood mode
+- **Global + project configs**: Project settings override global ones
+- **Quick bug analysis**: `cs -b "Description of the bug"` for immediate debugging
+
+### Cross-Platform Support
+
+Currently optimized for macOS. Future enhancements will include Windows compatibility.
 
 ## Output
 
