@@ -74,14 +74,27 @@ else
     fi
 fi
 
-# Check if already installed and remove old symlink
+# Check if already installed and remove old installations
 if [ -L "$INSTALL_DIR/cs" ]; then
-    echo "CodeSight already installed. Updating symlink..."
+    echo "CodeSight already installed. Updating installation..."
     rm "$INSTALL_DIR/cs"
 elif [ -e "$INSTALL_DIR/cs" ]; then
     echo "Warning: $INSTALL_DIR/cs exists but is not a symlink."
-    echo "Backing up to $INSTALL_DIR/cs.bak and replacing..."
-    mv "$INSTALL_DIR/cs" "$INSTALL_DIR/cs.bak"
+    
+    # Check if it's a previous version of our wrapper
+    if grep -q "CodeSight wrapper script" "$INSTALL_DIR/cs" 2>/dev/null; then
+        echo "Detected previous CodeSight installation. Updating..."
+        rm "$INSTALL_DIR/cs"
+    else
+        echo "This appears to be a different program. Backing up to $INSTALL_DIR/cs.bak and replacing..."
+        mv "$INSTALL_DIR/cs" "$INSTALL_DIR/cs.bak"
+    fi
+fi
+
+# Also check for cs-dev
+if [ -L "$INSTALL_DIR/cs-dev" ] || [ -e "$INSTALL_DIR/cs-dev" ]; then
+    echo "Updating cs-dev script..."
+    rm -f "$INSTALL_DIR/cs-dev"
 fi
 
 # Use a wrapper script instead of a symlink for better reliability
@@ -109,7 +122,9 @@ if [ ! -x "$INSTALL_DIR/cs" ]; then
     exit 1
 fi
 
-echo "CodeSight installed successfully to $INSTALL_DIR/cs"
+# Extract version number from cs.py
+VERSION=$(grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' "$SCRIPT_DIR/cs.py" | tr -d '"')
+echo "CodeSight v${VERSION} installed successfully to $INSTALL_DIR/cs"
 echo ""
 echo "Usage examples:"
 echo "  cs                    # Analyze current directory with improvement prompt"
