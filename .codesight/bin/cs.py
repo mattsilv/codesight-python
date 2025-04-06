@@ -173,17 +173,31 @@ def main():
         except ImportError:
             missing_deps.append(module)
     
-    # Give clear instructions if missing dependencies
+    # If there are missing dependencies, try to install them automatically
     if missing_deps:
-        print(f"\nMissing required dependencies: {', '.join(missing_deps)}")
-        print("\nPlease install the missing dependencies with your preferred package manager:")
-        print("  pip install " + " ".join(missing_deps))
-        print("  # or")
-        print("  python -m pip install " + " ".join(missing_deps))
-        print("  # or if you use uv")
-        print("  uv pip install " + " ".join(missing_deps))
-        print("\nThen run your command again.")
-        sys.exit(1)
+        # Check for virtual environment
+        venv_dir = current_dir / '.venv'
+        in_venv = venv_dir.exists() and 'VIRTUAL_ENV' in os.environ
+        
+        if in_venv:
+            print(f"Virtual environment detected and active.")
+            if auto_install_dependencies(missing_deps, in_venv=True):
+                print("✅ All dependencies installed successfully.")
+            else:
+                print("\n⚠️ Failed to install dependencies automatically.")
+                print("Please install them manually and try again.")
+                sys.exit(1)
+        else:
+            # Try to auto-install even if not in venv
+            if auto_install_dependencies(missing_deps):
+                print("✅ All dependencies installed successfully.")
+            else:
+                if venv_dir.exists():
+                    print(f"\nVirtual environment detected at: {venv_dir}")
+                    print(f"You may need to activate it first:")
+                    print(f"source {venv_dir}/bin/activate")
+                print("\nPlease install missing dependencies manually and try again.")
+                sys.exit(1)
     
     # Run the command
     print(f"Running: {cmd}")
@@ -206,6 +220,51 @@ def check_gitignore_for_codesight(project_dir):
         
     # Check for .codesight or .codesight/ in the gitignore
     return '.codesight/' in content or '.codesight' in content
+
+def auto_install_dependencies(missing_deps, in_venv=False):
+    """Automatically install missing dependencies using available package managers"""
+    if not missing_deps:
+        return True
+    
+    print(f"\nInstalling missing dependencies: {', '.join(missing_deps)}")
+    
+    # List of package managers to try in order of preference
+    package_managers = [
+        {"name": "pip", "cmd": "pip install {deps}"},
+        {"name": "python -m pip", "cmd": "python -m pip install {deps}"},
+        {"name": "uv", "cmd": "uv pip install {deps}"}
+    ]
+    
+    deps_str = " ".join(missing_deps)
+    success = False
+    
+    for pm in package_managers:
+        cmd = pm["cmd"].format(deps=deps_str)
+        print(f"Trying: {cmd}")
+        
+        try:
+            result = subprocess.run(cmd.split(), 
+                                   stdout=subprocess.PIPE, 
+                                   stderr=subprocess.PIPE, 
+                                   text=True)
+            
+            if result.returncode == 0:
+                print(f"✅ Successfully installed dependencies using {pm['name']}")
+                success = True
+                break
+        except FileNotFoundError:
+            print(f"❌ {pm['name']} not found, trying alternative...")
+    
+    if not success:
+        print("\n⚠️ Automatic installation failed. Please install dependencies manually:")
+        print("  pip install " + deps_str)
+        print("  # or")
+        print("  python -m pip install " + deps_str)
+        print("  # or")
+        print("  uv pip install " + deps_str)
+        return False
+    
+    return True
 
 def initialize_codesight(current_dir, script_dir):
     """Initialize CodeSight in the current project"""
@@ -238,26 +297,30 @@ def initialize_codesight(current_dir, script_dir):
         except ImportError:
             missing_deps.append(module)
     
-    # Print simple instructions if dependencies are missing
-    if missing_deps:
-        print(f"\nMissing required dependencies: {', '.join(missing_deps)}")
-        print("\nPlease install the missing dependencies with your preferred package manager:")
-        print("  pip install " + " ".join(missing_deps))
-        print("  # or")
-        print("  python -m pip install " + " ".join(missing_deps))
-        print("  # or if you use uv")
-        print("  uv pip install " + " ".join(missing_deps))
-        print("\nThen run 'cs -i' again.")
-    
-    # We've already checked for dependencies directly at the Python level,
-    # so we don't need to do additional venv-specific checks.
-    # Just inform the user if using a venv
+    # Check for virtual environment
     venv_dir = current_dir / '.venv'
-    if venv_dir.exists():
-        print("\nVirtual environment detected at: " + str(venv_dir))
-        print("If you need to install packages in this venv, use:")
-        print(f"source {venv_dir}/bin/activate")
-        print("Then install any missing dependencies with your package manager.")
+    in_venv = venv_dir.exists() and 'VIRTUAL_ENV' in os.environ
+    
+    # If there are missing dependencies, try to install them automatically
+    if missing_deps:
+        if in_venv:
+            print(f"Virtual environment detected at: {venv_dir}")
+            if auto_install_dependencies(missing_deps, in_venv=True):
+                print("✅ All dependencies installed successfully.")
+            else:
+                print(f"\nPlease activate your virtual environment and try again:")
+                print(f"source {venv_dir}/bin/activate")
+                print(f"Then run 'cs -i' again.")
+        else:
+            # Try to auto-install even if not in venv
+            if auto_install_dependencies(missing_deps):
+                print("✅ All dependencies installed successfully.")
+            else:
+                if venv_dir.exists():
+                    print(f"\nVirtual environment detected at: {venv_dir}")
+                    print(f"You may need to activate it first:")
+                    print(f"source {venv_dir}/bin/activate")
+                    print(f"Then run 'cs -i' again.")
     
     # Check if .gitignore has .codesight exclusion
     if (current_dir / '.git').exists() and not check_gitignore_for_codesight(current_dir):

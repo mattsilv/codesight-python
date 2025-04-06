@@ -1,5 +1,20 @@
 # CodeSight Python Changelog
 
+## v0.1.7 (2025-04-06)
+
+### Added
+- Automatic dependency installation during initialization and runtime
+- Support for multiple package managers (pip, python -m pip, uv)
+- Smart detection of virtual environments and installation context
+
+### Changed
+- Proactive dependency management that tries to install dependencies automatically
+- Improved user experience with less manual steps required
+
+### Fixed
+- Fixed installation workflow to handle dependencies without user intervention
+- Better handling of virtual environment detection and activation
+
 ## v0.1.6 (2025-04-06)
 
 ### Changed

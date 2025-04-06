@@ -1,7 +1,7 @@
 # CodeSight Development Guide
 
 ## Version Information
-Current version: 0.1.6
+Current version: 0.1.7
 
 ## Project Overview
 CodeSight is a tool for collecting and formatting code from a project to be used with LLMs like Claude. It:
@@ -10,7 +10,16 @@ CodeSight is a tool for collecting and formatting code from a project to be used
 3. Optimizes token usage by prioritizing recent files
 4. Outputs the formatted code to both a file and clipboard
 
-## Recent Improvements (v0.1.6)
+## Recent Improvements (v0.1.7)
+- Automatic dependency installation during initialization and runtime
+- Support for multiple package managers (pip, python -m pip, uv)
+- Smart detection of virtual environments and installation context
+- Proactive dependency management that tries to install dependencies automatically
+- Improved user experience with less manual steps required
+- Fixed installation workflow to handle dependencies without user intervention
+- Better handling of virtual environment detection and activation
+
+## Previous Improvements (v0.1.6)
 - Simplified dependency management to work with all Python environments
 - Improved cross-compatibility with different package managers (pip, uv)
 - More user-friendly error messages for missing dependencies
