@@ -6,12 +6,92 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 import subprocess
+import urllib.request
+from urllib.error import URLError
+
+# Version information
+__version__ = "0.1.2"  # Following semantic versioning
+
+def check_for_updates():
+    """Check GitHub for newer versions of CodeSight and return update info if available"""
+    # Cache file for update checks to avoid too frequent API calls
+    cache_file = Path.home() / '.codesight_update_cache.json'
+    cache_valid_hours = 24  # Check for updates once per day
+    
+    # Current time
+    current_time = time.time()
+    
+    # Check cache first
+    try:
+        if cache_file.exists():
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+                
+            # If cache is still valid and we already checked
+            if current_time - cache.get('last_check', 0) < cache_valid_hours * 3600:
+                if cache.get('update_available') and cache.get('latest_version'):
+                    return {
+                        'update_available': True,
+                        'current_version': __version__,
+                        'latest_version': cache['latest_version']
+                    }
+                return None  # No update available
+    except:
+        # If there's any issue with the cache, just continue
+        pass
+        
+    # If we get here, either the cache is expired or doesn't exist
+    try:
+        # GitHub API - latest release
+        url = "https://api.github.com/repos/anthropics/codesight-python/releases/latest"
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/vnd.github.v3+json", "User-Agent": f"CodeSight/{__version__}"}
+        )
+        
+        with urllib.request.urlopen(request, timeout=2) as response:
+            if response.getcode() == 200:
+                data = json.loads(response.read().decode())
+                latest_version = data.get('tag_name', '').lstrip('v')
+                
+                # Compare versions (simple string comparison works for semantic versioning)
+                if latest_version and latest_version > __version__:
+                    # Update cache
+                    cache_data = {
+                        'last_check': current_time,
+                        'update_available': True,
+                        'latest_version': latest_version
+                    }
+                    with open(cache_file, 'w') as f:
+                        json.dump(cache_data, f)
+                        
+                    return {
+                        'update_available': True,
+                        'current_version': __version__,
+                        'latest_version': latest_version
+                    }
+        
+        # If we get here, no update is available
+        cache_data = {
+            'last_check': current_time,
+            'update_available': False
+        }
+        with open(cache_file, 'w') as f:
+            json.dump(cache_data, f)
+            
+        return None
+            
+    except (URLError, Exception) as e:
+        # On connection error, just continue without update check
+        # Don't bother the user with network errors
+        return None
 
 def main():
     # Define CLI arguments
-    parser = argparse.ArgumentParser(description='CodeSight - Code analysis tool')
+    parser = argparse.ArgumentParser(description=f'CodeSight v{__version__} - Code analysis tool')
     parser.add_argument('directory', nargs='?', default='.', 
                         help='Directory to analyze (default: current directory)')
     parser.add_argument('-b', '--bug', nargs='?', const='', 
@@ -22,8 +102,15 @@ def main():
                         help='Initialize CodeSight in the current project')
     parser.add_argument('--no-venv', action='store_true',
                         help='Skip virtual environment activation')
+    parser.add_argument('-v', '--version', action='store_true',
+                        help='Show version information')
     
     args = parser.parse_args()
+    
+    # Show version if requested
+    if args.version:
+        print(f"CodeSight version {__version__}")
+        sys.exit(0)
     
     # Paths
     script_dir = Path(__file__).parent.parent
@@ -32,6 +119,11 @@ def main():
     # Handle initialization if requested
     if args.init:
         initialize_codesight(current_dir, script_dir)
+        # Check for updates after initialization
+        update_info = check_for_updates()
+        if update_info and update_info['update_available']:
+            print(f"\n🔄 Update available: {update_info['current_version']} → {update_info['latest_version']}")
+            print("   Run 'pip install --upgrade codesight' to update.")
         return
     
     # Look for project-specific config first, then fall back to global
@@ -72,6 +164,24 @@ def main():
     print(f"Running: {cmd}")
     os.system(cmd)
     
+    # Check for updates after command completes
+    update_info = check_for_updates()
+    if update_info and update_info['update_available']:
+        print(f"\n🔄 Update available: {update_info['current_version']} → {update_info['latest_version']}")
+        print("   Run 'pip install --upgrade codesight' to update.")
+    
+def check_gitignore_for_codesight(project_dir):
+    """Check if .gitignore exists and contains .codesight"""
+    gitignore_path = project_dir / '.gitignore'
+    if not gitignore_path.exists():
+        return False
+    
+    with open(gitignore_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+    # Check for .codesight or .codesight/ in the gitignore
+    return '.codesight/' in content or '.codesight' in content
+
 def initialize_codesight(current_dir, script_dir):
     """Initialize CodeSight in the current project"""
     print(f"Initializing CodeSight in {current_dir}...")
@@ -89,6 +199,48 @@ def initialize_codesight(current_dir, script_dir):
     # Write project config
     with open(config_path, 'w') as f:
         json.dump(default_config, f, indent=2)
+    
+    # Create .codesight directory if needed
+    codesight_dir = current_dir / '.codesight'
+    if not codesight_dir.exists():
+        codesight_dir.mkdir(exist_ok=True)
+    
+    # Check if local venv has all required dependencies
+    venv_dir = current_dir / '.venv'
+    if venv_dir.exists():
+        # We have a venv, let's make sure it has the required packages
+        try:
+            # Check for the humanize package which seems to be causing issues
+            import_check = ['python', '-c', 'import humanize, tiktoken, pathspec']
+            subprocess.run(import_check, cwd=current_dir, env=os.environ,
+                          capture_output=True, text=True, check=True)
+            print("Virtual environment already configured with required dependencies.")
+        except subprocess.CalledProcessError:
+            # Missing dependencies, install them
+            print("Installing required dependencies in the virtual environment...")
+            install_cmd = ['/bin/bash', '-c', f'source {venv_dir}/bin/activate && pip install tiktoken openai pytest typer more-itertools humanize pathspec']
+            subprocess.run(install_cmd, cwd=current_dir, env=os.environ, shell=True)
+    
+    # Check if .gitignore has .codesight exclusion
+    if (current_dir / '.git').exists() and not check_gitignore_for_codesight(current_dir):
+        print("\n⚠️  WARNING: .codesight/ is not excluded in your .gitignore file!")
+        print("   To avoid accidentally committing CodeSight files, add this line to your .gitignore:")
+        print("   .codesight/\n")
+        
+        # Ask user if they want to automatically add it
+        response = input("Would you like to automatically add .codesight/ to your .gitignore? [y/N]: ").strip().lower()
+        if response == 'y' or response == 'yes':
+            gitignore_path = current_dir / '.gitignore'
+            
+            # Create .gitignore if it doesn't exist
+            if not gitignore_path.exists():
+                with open(gitignore_path, 'w', encoding='utf-8') as f:
+                    f.write("# CodeSight generated files\n.codesight/\n")
+            else:
+                with open(gitignore_path, 'a', encoding='utf-8') as f:
+                    f.write("\n# CodeSight generated files\n.codesight/\n")
+            
+            print("Added .codesight/ to .gitignore file.")
     
     print(f"Created project config at {config_path}")
     print("You can now run 'cs' without arguments to analyze this project.")

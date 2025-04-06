@@ -56,8 +56,20 @@ if [ ! -d "$VENV_DIR" ]; then
     echo "Installing dependencies..."
     uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
 else
-    # Activate existing environment
-    source "$VENV_DIR/bin/activate"
+    # Check if the user is already in a venv
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        # If already in a venv but it's not our project venv, deactivate it
+        if [[ "$VIRTUAL_ENV" != "$VENV_DIR" ]]; then
+            echo "Exiting current virtual environment..."
+            deactivate 2>/dev/null || true
+            # Now activate our project venv
+            source "$VENV_DIR/bin/activate"
+        fi
+        # If already in our project venv, do nothing
+    else
+        # Not in any venv, activate our project venv
+        source "$VENV_DIR/bin/activate"
+    fi
 fi
 
 # Print debugging info if requested
