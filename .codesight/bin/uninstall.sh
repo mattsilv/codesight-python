@@ -6,6 +6,21 @@ echo "CodeSight Uninstaller"
 echo "===================="
 echo
 
+# Get the absolute path of this script's directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+# Get the repository root directory (assuming standard structure)
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." &> /dev/null && pwd)"
+
+# Check if running from the development repository
+IS_DEV_REPO=false
+if [ -d "$REPO_ROOT/.git" ] && [ -f "$REPO_ROOT/README.md" ] && grep -q "CodeSight" "$REPO_ROOT/README.md" 2>/dev/null; then
+    IS_DEV_REPO=true
+    echo "DEVELOPMENT REPOSITORY DETECTED at $REPO_ROOT"
+    echo "This script will NOT remove any development binaries or scripts."
+    echo "It will only uninstall externally installed versions of CodeSight."
+    echo
+fi
+
 # Check for common installation locations
 INSTALL_LOCATIONS=(
     "/usr/local/bin"
@@ -19,12 +34,30 @@ REMOVED=false
 # Remove from each potential location
 for LOCATION in "${INSTALL_LOCATIONS[@]}"; do
     if [ -e "$LOCATION/cs" ]; then
+        # If this is a development repository, check if the binary points to it
+        if [ "$IS_DEV_REPO" = true ]; then
+            TARGET=$(grep -o '".*"' "$LOCATION/cs" 2>/dev/null | tr -d '"' | head -1)
+            if [[ "$TARGET" == *"$REPO_ROOT"* ]]; then
+                echo "⚠️  SKIPPING cs in $LOCATION (points to development repository)"
+                continue
+            fi
+        fi
+        
         echo "Removing cs from $LOCATION"
         rm -f "$LOCATION/cs"
         REMOVED=true
     fi
     
     if [ -e "$LOCATION/cs-dev" ]; then
+        # If this is a development repository, check if the binary points to it
+        if [ "$IS_DEV_REPO" = true ]; then
+            TARGET=$(grep -o '".*"' "$LOCATION/cs-dev" 2>/dev/null | tr -d '"' | head -1)
+            if [[ "$TARGET" == *"$REPO_ROOT"* ]]; then
+                echo "⚠️  SKIPPING cs-dev in $LOCATION (points to development repository)"
+                continue
+            fi
+        fi
+        
         echo "Removing cs-dev from $LOCATION"
         rm -f "$LOCATION/cs-dev"
         REMOVED=true

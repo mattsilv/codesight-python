@@ -13,7 +13,7 @@ import urllib.request
 from urllib.error import URLError
 
 # Version information
-__version__ = "0.1.2"  # Following semantic versioning
+__version__ = "0.1.3"  # Following semantic versioning
 
 def check_for_updates():
     """Check GitHub for newer versions of CodeSight and return update info if available"""

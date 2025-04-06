@@ -61,9 +61,16 @@ git pull
 ### Use Case 3: Uninstall/Reinstall (Clean Slate)
 
 ```bash
-# Complete uninstallation
+# Method 1: Complete uninstallation (if you have the source repo)
 cd /path/to/codesight-python
 .codesight/bin/uninstall.sh
+
+# Method 2: Uninstall from any project with CodeSight installed
+cd /path/to/any-project-with-codesight
+.codesight/bin/uninstall.sh
+
+# Method 3: Uninstall command (if you can't find the repo or a project)
+curl -s https://raw.githubusercontent.com/mattsilv/codesight-python/main/.codesight/bin/uninstall.sh | bash
 
 # Verify removal
 which cs                # Should return nothing
@@ -108,6 +115,7 @@ When a new version is available, you'll see an update notification after running
 - **Missing dependencies**: Automatically fixed on run
 - **Nested virtual environments**: Automatically detected and handled
 - **Path issues**: Use `cs --debug` to verify installation paths
+- **Uninstalling CodeSight**: Run `.codesight/bin/uninstall.sh` from any project where it's installed
 
 ## License
 
