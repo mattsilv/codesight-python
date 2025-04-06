@@ -126,6 +126,27 @@ This special mode will include the `.codesight` directory (normally excluded) wh
 
 > **Note**: Running from within the `.codesight` directory is strongly recommended for dogfood mode to avoid issues with nested directories and path resolution. The script has been updated to better handle this case.
 
+## Quick Start with `cs` Command
+
+For convenience, CodeSight provides a simple `cs` command that handles all the complexity:
+
+```bash
+# Install the cs command globally (one-time setup)
+sudo .codesight/bin/install.sh
+
+# Then use from anywhere
+cs                      # Analyze current directory
+cs -b "Bug description" # Analyze with bug mode and description
+cs -c                   # Configure settings
+cs path/to/project      # Analyze specific project
+```
+
+Features of the `cs` command:
+- Automatically handles virtual environment setup
+- Detects CodeSight project and enables dogfood mode
+- Configurable settings with `cs -c`
+- Quick bug analysis with `cs -b "Description of the bug"`
+
 ## Output
 
 - Results are saved to `.codesight/llm.txt`

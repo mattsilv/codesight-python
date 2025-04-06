@@ -1,0 +1,33 @@
+#!/bin/bash
+# CodeSight quick launcher
+
+# Determine script location 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+CODESIGHT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Check if virtual environment exists
+VENV_DIR="$CODESIGHT_DIR/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Setting up virtual environment for CodeSight..."
+    cd "$CODESIGHT_DIR" || exit 1
+    
+    # Install UV if needed
+    if ! command -v uv &> /dev/null; then
+        echo "Installing uv..."
+        pip install uv
+    fi
+    
+    # Create and activate virtual environment
+    uv venv
+    source "$VENV_DIR/bin/activate"
+    
+    # Install dependencies
+    echo "Installing dependencies..."
+    uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
+else
+    # Activate existing environment
+    source "$VENV_DIR/bin/activate"
+fi
+
+# Run the CS command
+python "$SCRIPT_DIR/cs.py" "$@"
