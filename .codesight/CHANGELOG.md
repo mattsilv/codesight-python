@@ -1,5 +1,21 @@
 # CodeSight Python Changelog
 
+## v0.1.11 (2025-04-06)
+
+### Added
+- Added support for multiple package managers during updates
+- UV package manager support for update command
+
+### Changed
+- Enhanced update mechanism to try multiple installation methods
+- Improved error handling during package manager operations
+- Better feedback during update failures
+
+### Fixed
+- Fixed error when pip isn't in PATH during update
+- Improved cross-platform compatibility for update operations
+- Fixed reliability issues with the update command (`cs -u`)
+
 ## v0.1.10 (2025-04-06)
 
 ### Added

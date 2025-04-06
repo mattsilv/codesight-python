@@ -2,7 +2,7 @@
 
 ## Version Information
 
-Current version: 0.1.10
+Current version: 0.1.11
 
 ## Project Overview
 
@@ -13,7 +13,16 @@ CodeSight is a tool for collecting and formatting code from a project to be used
 3. Optimizes token usage by prioritizing recent files
 4. Outputs the formatted code to both a file and clipboard
 
-## Recent Improvements (v0.1.10)
+## Recent Improvements (v0.1.11)
+
+- Enhanced update mechanism with support for multiple package managers
+- Improved reliability of update command (`cs -u`) by trying multiple methods
+- Added UV package manager support for updates
+- Fixed error handling when a package manager isn't available
+- Better error messages during update failures
+- Improved cross-platform compatibility for update operations
+
+## Previous Improvements (v0.1.10)
 
 - Enhanced exclusion patterns to hide high-token files like lock files
 - Added comprehensive patterns for dependency lock files (uv.lock, package-lock.json, etc.)

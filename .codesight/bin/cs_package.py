@@ -118,70 +118,58 @@ def update_codesight():
     """Update CodeSight to the latest version by fetching from GitHub and reinstalling"""
     print("Updating CodeSight to the latest version...")
     
-    # Check if we have git access
-    try:
-        # Check if we can find the global codesight installation
-        result = subprocess.run(
-            ["pip", "show", "codesight"], 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            text=True
-        )
-        
-        if result.returncode == 0:
-            # Global installation exists, use pip to update
-            print("Found global installation. Updating via pip...")
-            update_cmd = ["pip", "install", "--upgrade", "codesight"]
-            
+    # Try multiple package managers to improve reliability
+    package_managers = [
+        {"name": "pip", "check_cmd": ["pip", "show", "codesight"], 
+         "update_cmd": ["pip", "install", "--upgrade", "codesight"]},
+        {"name": "python -m pip", "check_cmd": ["python", "-m", "pip", "show", "codesight"], 
+         "update_cmd": ["python", "-m", "pip", "install", "--upgrade", "codesight"]},
+        {"name": "uv", "check_cmd": ["uv", "pip", "show", "codesight"], 
+         "update_cmd": ["uv", "pip", "install", "--upgrade", "codesight"]},
+    ]
+    
+    for pm in package_managers:
+        try:
+            # Check if we can find the global codesight installation
             result = subprocess.run(
-                update_cmd,
+                pm["check_cmd"], 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE, 
                 text=True
             )
             
             if result.returncode == 0:
-                print("✅ CodeSight updated successfully via pip!")
-                print(f"Updated to version: {get_latest_version()}")
-                return True
-            else:
-                print("⚠️ Failed to update via pip. Error:")
-                print(result.stderr)
-        else:
-            # Try python -m pip as fallback
-            result = subprocess.run(
-                ["python", "-m", "pip", "show", "codesight"], 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
-                text=True
-            )
-            
-            if result.returncode == 0:
-                print("Found global installation. Updating via python -m pip...")
-                update_cmd = ["python", "-m", "pip", "install", "--upgrade", "codesight"]
+                # Global installation exists, use this package manager to update
+                print(f"Found global installation. Updating via {pm['name']}...")
                 
                 result = subprocess.run(
-                    update_cmd,
+                    pm["update_cmd"],
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.PIPE, 
                     text=True
                 )
                 
                 if result.returncode == 0:
-                    print("✅ CodeSight updated successfully via python -m pip!")
+                    print(f"✅ CodeSight updated successfully via {pm['name']}!")
                     print(f"Updated to version: {get_latest_version()}")
                     return True
                 else:
-                    print("⚠️ Failed to update via python -m pip. Error:")
+                    print(f"⚠️ Failed to update via {pm['name']}. Error:")
                     print(result.stderr)
-    
-    except Exception as e:
-        print(f"⚠️ Error during update: {e}")
+                    # Continue to try the next package manager
+        except FileNotFoundError:
+            # This package manager isn't available, try the next one
+            continue
+        except Exception as e:
+            print(f"⚠️ Error using {pm['name']}: {e}")
+            # Continue to try the next package manager
     
     print("\n⚠️ Automatic update failed. Please update manually with:")
     print("  pip install --upgrade codesight")
     print("  # or")
     print("  python -m pip install --upgrade codesight")
+    print("  # or")
+    print("  uv pip install --upgrade codesight")
     return False
 
 
