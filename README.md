@@ -2,7 +2,7 @@
 
 A Python utility for collecting and formatting code for LLMs, optimized for performance on M-series Macs.
 
-**Version: 0.1.9**
+**Version: 0.1.10**
 
 ## Installation
 

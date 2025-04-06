@@ -338,6 +338,27 @@ def analyze_token_usage(directory, limit=10):
             r"\.xlsx$",
             r"\.ppt$",
             r"\.pptx$",
+            # Lock files - dependency managers
+            r"\.lock$",
+            r"package-lock\.json$",
+            r"yarn\.lock$",
+            r"Cargo\.lock$",
+            r"Gemfile\.lock$",
+            r"poetry\.lock$",
+            r"uv\.lock$",
+            r"pnpm-lock\.yaml$",
+            r"conda-lock\.yml$",
+            # Large generated files
+            r"\.min\.js$",
+            r"\.min\.css$",
+            r"\.bundle\.js$",
+            r"\.g\.py$",
+            r"\.gen\.[^/]*$",
+            r"\.generated\.[^/]*$",
+            # Dependency directories
+            r"node_modules/",
+            r"vendor/",
+            r"bower_components/",
         ]
         
         # Check for .gitignore patterns

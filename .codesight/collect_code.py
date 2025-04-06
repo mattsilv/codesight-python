@@ -186,6 +186,27 @@ def build_exclusion_patterns(
         '*.parquet',
         '*.h5',
         '*.hdf5',
+        # Lock files - dependency managers
+        '*.lock',
+        'package-lock.json',
+        'yarn.lock',
+        'Cargo.lock',
+        'Gemfile.lock',
+        'poetry.lock',
+        'uv.lock',
+        'pnpm-lock.yaml',
+        'conda-lock.yml',
+        # Large generated files
+        '*.min.js',
+        '*.min.css',
+        '*.bundle.js',
+        '*.g.py',
+        '*.gen.*',
+        '*.generated.*',
+        # Dependency directories
+        'node_modules/',
+        'vendor/',
+        'bower_components/',
     ])
     
     # ALWAYS exclude the output file to prevent recursive processing

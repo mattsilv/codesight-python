@@ -1,5 +1,21 @@
 # CodeSight Python Changelog
 
+## v0.1.10 (2025-04-06)
+
+### Added
+- Enhanced exclusion patterns to hide high-token files like lock files
+- Comprehensive patterns for dependency lock files (uv.lock, package-lock.json, etc.)
+- Exclusion support for large generated files (minified JS/CSS, bundle files)
+- Directory exclusions for common dependency directories (node_modules, vendor, etc.)
+
+### Changed
+- Optimized token usage reporting by filtering out more non-essential files
+- Expanded file type exclusions based on token usage analysis results
+
+### Fixed
+- Fixed potential issues with lock files consuming excessive tokens
+- Improved handling of very large lock and generated files
+
 ## v0.1.9 (2025-04-06)
 
 ### Added
