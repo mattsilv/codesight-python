@@ -43,7 +43,8 @@ def initialize_codesight(current_dir, script_dir):
     default_config = {
         "default_directory": ".",
         "always_dogfood": False,
-        "token_limit": 100000
+        "token_limit": 100000,
+        "exclusions": ""  # Comma-separated list of patterns to exclude
     }
     
     # Write project config
@@ -147,7 +148,8 @@ def load_config(config_path):
     # Default config
     default_config = {
         "always_dogfood": False,
-        "token_limit": 100000
+        "token_limit": 100000,
+        "exclusions": ""  # Comma-separated list of patterns to exclude
     }
     
     # Write default config
@@ -184,6 +186,16 @@ def create_or_edit_config(config_path, is_project_config=False):
         "Token limit (default: 100000): ", 
         config.get('token_limit', 100000)
     )
+    
+    # Add custom exclusions
+    current_exclusions = config.get('exclusions', '')
+    exclusions_prompt = "Comma-separated list of folders, file types, or strings to exclude"
+    if current_exclusions:
+        exclusions_prompt += f" (current: {current_exclusions})"
+    exclusions_prompt += ": "
+    new_exclusions = input(exclusions_prompt).strip()
+    if new_exclusions:
+        config['exclusions'] = new_exclusions
     
     # Write updated config
     with open(config_path, 'w') as f:
@@ -246,13 +258,14 @@ def update_bug_description(script_dir, bug_description):
     temp_path.rename(bugfix_path)
 
 
-def analyze_token_usage(directory, limit=10):
+def analyze_token_usage(directory, limit=10, custom_exclusions=None):
     """
     Analyze token usage in files within a directory.
     
     Args:
         directory: Path to the directory to analyze
         limit: Maximum number of files to show in results
+        custom_exclusions: Optional list of custom exclusion patterns
         
     Returns:
         A tuple of (total_tokens, file_tokens) where:
@@ -380,6 +393,10 @@ def analyze_token_usage(directory, limit=10):
             'test_*.py',
         ]
         patterns.extend(test_excludes)
+        
+        # Add custom exclusions if provided
+        if custom_exclusions:
+            patterns.extend(custom_exclusions)
         
         # ALWAYS exclude the output file and prompts to prevent recursive processing
         output_excludes = [

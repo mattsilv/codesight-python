@@ -1,5 +1,19 @@
 # CodeSight Python Changelog
 
+## v0.1.12 (2025-04-06)
+
+### Added
+- Configuration option for custom file and folder exclusions
+- Comma-delimited exclusion list in project config file
+- Project-specific exclusion patterns to optimize token usage
+- Custom exclusion display in token analysis output
+
+### Changed
+- Enhanced configuration interface with exclusion pattern management
+- Improved project setup with exclusion options
+- Better token optimization with user-defined exclusions
+- Updated token analysis to respect custom exclusions
+
 ## v0.1.11 (2025-04-06)
 
 ### Added

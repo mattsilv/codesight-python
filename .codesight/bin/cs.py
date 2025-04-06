@@ -112,8 +112,13 @@ def main():
                 print("Please install them manually and try again.")
                 sys.exit(1)
                 
-        # Run token analysis
-        results = analyze_token_usage(directory)
+        # Get custom exclusions from config if they exist
+        custom_exclusions = []
+        if config.get('exclusions'):
+            custom_exclusions = [pattern.strip() for pattern in config.get('exclusions', '').split(',') if pattern.strip()]
+        
+        # Run token analysis with custom exclusions
+        results = analyze_token_usage(directory, custom_exclusions=custom_exclusions)
         
         if not results:
             print("Failed to analyze token usage.")
@@ -163,6 +168,13 @@ def main():
         print("- Compressed files (.zip, .gz, .tar, .rar, .7z)")
         print("- Data files (.csv, .json, .xml, .yaml, .yml, .npy, .pkl, etc.)")
         print("- Binary/image files (.jpg, .png, .pdf, .doc, etc.)")
+        
+        # Show custom exclusions if any were used
+        if custom_exclusions:
+            print("\nCustom exclusions applied:")
+            for pattern in custom_exclusions:
+                print(f"- {pattern}")
+                
         print("\nTip: Add exclusion patterns to .gitignore to exclude more file types.")
         print("\nTo customize exclusions further, use a project-specific config:")
         print("  cs -c")
@@ -216,7 +228,17 @@ def main():
     
     # Construct command
     collect_script = script_dir / 'collect_code.py'
-    cmd = f'python {collect_script} {directory} --prompt {prompt_type} {dogfood_flag}'
+    
+    # Add custom exclusions from config if they exist
+    exclusions = config.get('exclusions', '').strip()
+    exclusion_args = ''
+    if exclusions:
+        # Convert comma-separated exclusions to space-separated args for --exclude
+        exclusion_list = [pattern.strip() for pattern in exclusions.split(',')]
+        exclusion_args = '--exclude ' + ' '.join([f'"{pattern}"' for pattern in exclusion_list if pattern])
+    
+    # Build the full command
+    cmd = f'python {collect_script} {directory} --prompt {prompt_type} {dogfood_flag} {exclusion_args}'
     
     # Check for required dependencies before running
     missing_deps = []

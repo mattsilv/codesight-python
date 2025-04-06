@@ -2,7 +2,7 @@
 
 ## Version Information
 
-Current version: 0.1.11
+Current version: 0.1.12
 
 ## Project Overview
 
@@ -13,7 +13,16 @@ CodeSight is a tool for collecting and formatting code from a project to be used
 3. Optimizes token usage by prioritizing recent files
 4. Outputs the formatted code to both a file and clipboard
 
-## Recent Improvements (v0.1.11)
+## Recent Improvements (v0.1.12)
+
+- Added configuration option for custom file and folder exclusions
+- Implemented comma-delimited exclusion list in config file
+- Enhanced token optimization by allowing project-specific exclusions
+- Added support for excluding high-token files and directories from analysis
+- Improved project configuration with easier exclusion pattern management
+- Added custom exclusion display in token analysis output
+
+## Previous Improvements (v0.1.11)
 
 - Enhanced update mechanism with support for multiple package managers
 - Improved reliability of update command (`cs -u`) by trying multiple methods
