@@ -28,6 +28,8 @@ def parse_arguments() -> argparse.Namespace:
                        help='Additional patterns to exclude')
     parser.add_argument('--include-tests', action='store_true', 
                        help='Include test directories')
+    parser.add_argument('--include-structural', action='store_true',
+                       help='Include structural files like __init__.py, setup.py, etc.')
     parser.add_argument('--dogfood', action='store_true',
                        help='Include .codesight directory (for CodeSight development)')
     parser.add_argument('--output-file', default='.codesight/llm.txt',
@@ -38,7 +40,9 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def build_exclusion_patterns(project_root: Path, user_excludes: List[str], 
-                           include_tests: bool, include_codesight: bool) -> pathspec.PathSpec:
+                           include_tests: bool, include_codesight: bool,
+                           include_structural: bool = False,
+                           output_file: str = 'llm.txt') -> pathspec.PathSpec:
     """Build patterns for excluding files from collection."""
     # Start with .gitignore patterns
     patterns = ['.git']  # Always ignore .git
@@ -86,6 +90,49 @@ def build_exclusion_patterns(project_root: Path, user_excludes: List[str],
         '*.yaml',
         '*.yml',
     ])
+    
+    # ALWAYS exclude the output file to prevent recursive processing
+    # Both the file name and paths with the file name
+    standard_excludes.extend([
+        output_file,
+        f"*/{output_file}",
+        f".codesight/{output_file}",
+        # Exclude prompts directory (templates don't need to be analyzed)
+        "prompts/",
+        "*/prompts/",
+        ".codesight/prompts/",
+    ])
+    
+    # Always exclude these configuration files
+    standard_excludes.extend([
+        ".gitignore",
+        "*/.gitignore",
+        ".csconfig.json",
+        "*/.csconfig.json",
+        "*.bak",
+        "*/*.bak",
+    ])
+    
+    # Exclude structural files unless explicitly included
+    if not include_structural:
+        standard_excludes.extend([
+            # Common config files
+            "*.toml",
+            "setup.py",
+            "setup.cfg",
+            "requirements.txt",
+            "LICENSE",
+            "Dockerfile",
+            "docker-compose.yml",
+            "Makefile",
+            # Structural files with minimal content
+            "__init__.py",
+            "*/__init__.py",
+            "__main__.py",
+            "*/__main__.py",
+            "conftest.py",
+            "*/conftest.py",
+        ])
 
     # Add user excludes
     patterns.extend(standard_excludes)
@@ -198,6 +245,9 @@ async def process_file(file_path: Path, mtime: float, project_root: Path,
                 pool,
                 lambda: file_path.read_text(encoding='utf-8', errors='ignore')
             )
+            
+        # Optimize content to reduce tokens
+        content = optimize_content(content)
 
         # Check token limit and apply smart truncation if needed
         file_tokens = len(encoder.encode(content))
@@ -222,14 +272,29 @@ async def process_file(file_path: Path, mtime: float, project_root: Path,
 
         # Only add content if we're under the limit
         if total_tokens + file_tokens <= token_limit:
+            # Create a more compact header format that uses fewer tokens
             result = f"\n{header}\n{content}"
             total_tokens += file_tokens
             return result, total_tokens, truncated
         else:
-            return f"\n# --- {file_path.name} skipped (token limit reached) ---", total_tokens, truncated
+            return f"\n# {file_path.name}: skipped (token limit)", total_tokens, truncated
 
     except Exception as e:
         return f"\n# --- Error reading file: {relative_path} ---\n# Error: {e}", total_tokens, truncated
+        
+def optimize_content(content: str) -> str:
+    """Optimize file content to reduce token count without losing meaning."""
+    
+    # Remove duplicate blank lines (more than 2 consecutive newlines)
+    content = re.sub(r'\n{3,}', '\n\n', content)
+    
+    # Trim trailing whitespace at the end of lines
+    content = re.sub(r"[ \t]+$", "", content, flags=re.MULTILINE)
+    
+    # Trim the content but ensure it ends with a newline
+    content = content.strip() + '\n'
+    
+    return content
 
 
 async def build_output(group_sort_info: List[Dict[str, Any]], 
@@ -239,23 +304,22 @@ async def build_output(group_sort_info: List[Dict[str, Any]],
     """Optimized output builder using async for file reading operations"""
     output_parts = []
 
-    # Add today's date and project info at the top
-    output_parts.append(f"# CodeSight Analysis - {datetime.now().strftime('%Y-%m-%d')}")
-    output_parts.append(f"# Project: {project_root.name}")
+    # Add minimal project info at the top
+    output_parts.append(f"# CodeSight: {project_root.name} ({datetime.now().strftime('%Y-%m-%d')})")
 
-    # Add code structure overview - grouped by directory
-    output_parts.append("\n# --- Code Structure Overview ---")
+    # Add compact code structure overview
+    output_parts.append("\n# Files:")
 
     for group in group_sort_info:
         relative_dir = group['dir'].relative_to(project_root)
-        output_parts.append(f"# Directory: {relative_dir}/")
-
+        dir_name = str(relative_dir) + "/" if str(relative_dir) != '.' else ""
+        
         # Sort files alphabetically for the overview
         sorted_files_overview = sorted([f for f, _ in group['files']], key=lambda p: p.name)
         for file_path in sorted_files_overview:
-            output_parts.append(f"#   {file_path.name}")
+            output_parts.append(f"# - {dir_name}{file_path.name}")
 
-    output_parts.append("# --- End Code Structure Overview ---\n")
+    output_parts.append("")
 
     # Add prompt from template file based on selected prompt type
     prompt_filename = f"{prompt_type}.md"
@@ -373,12 +437,17 @@ async def main_async() -> None:
     # Use dogfood mode if explicitly enabled or auto-detected
     dogfood_mode = args.dogfood or is_codesight_project
 
+    # Get output file name for exclusion (extract the file name without the path)
+    output_file_name = Path(args.output_file).name
+    
     # Build exclusion patterns
     exclusion_spec = build_exclusion_patterns(
         project_root,
         args.exclude,
         args.include_tests,
-        dogfood_mode
+        dogfood_mode,
+        args.include_structural,
+        output_file_name
     )
 
     # Collect files (async)

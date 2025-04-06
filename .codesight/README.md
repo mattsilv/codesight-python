@@ -1,4 +1,4 @@
-# CodeSight-Python
+# CodeSight-Python v0.1.1
 
 A tool for collecting and formatting code for LLM analysis, optimized for M-series Macs.
 
@@ -43,12 +43,15 @@ This will:
 - **Dogfood mode:** When working on CodeSight itself, automatically includes the `.codesight` directory
 - **Output persistence:** Saves analysis to `.codesight/llm.txt` for future reference
 - **Custom prompts:** Use targeted prompts for different use cases (improvement suggestions, bug fixes)
+- **Token optimization:** Automatically excludes non-essential files and optimizes formatting to reduce token usage
+- **Configuration system:** Uses XDG-compliant configuration paths for better cross-platform support
 
 ## Options
 
 - `--token-limit N`: Set maximum token count (default: 100000)
 - `--exclude PATTERN [PATTERN ...]`: Add exclusion patterns
 - `--include-tests`: Include test directories (excluded by default)
+- `--include-structural`: Include structural files like __init__.py, setup.py, etc. (excluded by default)
 - `--dogfood`: Include .codesight directory (for CodeSight development)
 - `--output-file PATH`: Custom output file path (default: .codesight/llm.txt)
 - `--prompt TYPE`: Select prompt type (options: improvement, bugfix, default: improvement)
