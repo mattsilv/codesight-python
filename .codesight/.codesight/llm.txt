@@ -1,0 +1,1286 @@
+# CodeSight Python Improvement Analysis
+
+## AI Assistant Persona
+You are a Senior Python Engineer with deep expertise in writing clean, maintainable, Pythonic code. You have extensive experience with modern Python practices, libraries, and have helped teams scale their codebases efficiently.
+
+## Context
+The user is likely using AI-assisted development tools and wants to ensure their Python codebase follows best practices. Focus on improvements that make the code more maintainable, readable, and align with Python community standards.
+
+## Instructions
+Based on the code provided, identify the **top 3 highest-priority improvements** that would have the most significant positive impact. Prioritize:
+
+1. **Code Organization & Structure**
+   - Proper module/package organization 
+   - Clear separation of concerns
+   - Type hints that enhance IDE autocompletion and AI code assistance
+
+2. **Documentation & Readability**
+   - Docstrings compatible with tools (Google-style, NumPy, or reST)
+   - Clear function/variable names
+   - Strategic comments explaining "why" not "what"
+
+3. **Python-Specific Optimizations**
+   - Pythonic idioms (`with` statements, list comprehensions, etc.)
+   - Appropriate use of standard libraries (pathlib vs os.path)
+   - Performance considerations (generators vs lists, etc.)
+
+## Output Format
+For each improvement:
+
+1. **Target**: Specific file(s), function(s), or class(es) that need modification
+2. **Impact**: Why this matters for code quality, maintainability, or performance
+3. **Python-Specific Context**: Relevant PEP guidelines or Python conventions
+4. **Implementation Steps**: Actionable guidance with code examples where helpful
+5. **AI Assistance Note**: How AI tools can help implement this change (if applicable)
+
+## Example Format
+```
+## Improvement 1: [Brief title]
+
+**Target**: `path/to/file.py` - `ClassOrFunctionName`
+
+**Impact**: [Medium/High] This change will significantly improve [performance/maintainability/etc]
+
+**Python-Specific Context**: This aligns with [PEP XXX/Python idiom/best practice]
+
+**Implementation Steps**:
+1. Step one with details
+2. Step two with details
+   ```python
+   # Example code snippet demonstrating the implementation
+   ```
+
+**AI Assistance Note**: When implementing, ask your AI assistant to [specific guidance]
+```
+
+# CodeSight: .codesight (2025-04-06)
+
+# Files:
+# - CHANGELOG.md
+# - README.md
+# - collect_code.py
+# - bin/cs
+# - bin/cs-dev
+# - bin/cs.py
+# - bin/install.sh
+
+# --- Start Code Files ---
+
+# Directory: ./
+
+# --- README.md (a minute ago) ---
+# CodeSight Python
+
+A Python utility for collecting and formatting code for LLMs, optimized for performance on M-series Macs.
+
+## Features
+
+- Smart exclusion patterns based on .gitignore
+- Recency-based directory sorting
+- Token optimization for LLMs with truncation for older files
+- Asyncio, ProcessPoolExecutor, and ThreadPoolExecutor for optimal performance
+- Customizable prompt templates for different analysis types
+
+## Quick Start for Regular Users
+
+```bash
+# Install the cs command globally (one-time setup)
+cd /Users/m/gh/codesight-python
+.codesight/bin/install.sh
+
+# Setup for your project
+cd /path/to/your/project
+cs -i                   # Initialize project config
+
+# Then simply use:
+cs                      # Analyze project with one command!
+```
+
+### Using CodeSight
+
+```bash
+cs                      # Analyze current project with improvement prompt
+cs -b "Bug description" # Analyze with bug mode and description
+cs -c                   # Configure settings (global or project-specific)
+cs path/to/project      # Analyze a specific project
+cs --debug              # Show debug information about paths
+```
+
+### Features of the `cs` Command
+
+- **Zero-argument operation**: Just type `cs` in your project
+- **Project-specific configuration**: Creates `.codesight-config.json` in your project
+- **Automatic environment management**: Creates and activates virtual environments
+- **Global + project configs**: Project settings override global ones
+- **Quick bug analysis**: `cs -b "Description of the bug"` for immediate debugging
+
+## Output
+
+- Results are saved to `.codesight/llm.txt` in your project
+- Content is also copied to your clipboard automatically
+
+## Manual Installation
+
+If you prefer not to use the provided installation script:
+
+```bash
+# Navigate to your project directory
+cd /path/to/your/project
+
+# Create and activate virtual environment with uv
+pip install uv
+uv venv
+source .venv/bin/activate  # On Unix/Mac
+# OR
+.venv\Scripts\activate     # On Windows
+
+# Install required dependencies
+uv pip install tiktoken openai typer more-itertools humanize pathspec
+
+# Run CodeSight manually
+python /path/to/codesight-python/.codesight/collect_code.py .
+```
+
+## Advanced Usage: Custom Prompts
+
+CodeSight includes different prompt templates:
+
+```bash
+# For general code improvements (default)
+cs --prompt improvement
+
+# For debugging specific issues
+cs --prompt bugfix
+```
+
+## Cross-Platform Support
+
+Currently optimized for macOS. Future enhancements will include Windows compatibility.
+
+---
+
+## For CodeSight Developers
+
+If you're working on CodeSight itself, please use the dedicated developer mode:
+
+```bash
+# Run the developer-specific command
+cd /Users/m/gh/codesight-python
+cs-dev --debug
+```
+
+This special mode will include the `.codesight` directory (normally excluded) while preventing infinite recursion.
+
+For more detailed development instructions, see the [CLAUDE.md](CLAUDE.md) file in this repository.
+
+## Directory Structure for Developers
+
+```
+codesight-python/           # Repository root
+├── .codesight/             # Python package directory
+│   ├── collect_code.py     # Main script
+│   ├── bin/                # CLI tools
+│   │   ├── cs              # Main CLI script
+│   │   ├── cs-dev          # Developer mode script
+│   │   ├── cs.py           # Python component of CLI
+│   │   └── install.sh      # Installation script
+│   ├── prompts/            # Prompt templates
+│   │   ├── improvement.md  # Default prompt
+│   │   └── bugfix.md       # Bug-fixing prompt
+│   └── ... other files
+└── README.md, LICENSE, etc.
+```
+
+## License
+
+MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+# --- collect_code.py (3 minutes ago) ---
+#!/usr/bin/env python
+"""
+CodeSight: Collects and formats code for LLM analysis, optimized for M-series Macs.
+"""
+
+import argparse
+import asyncio
+import re
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Tuple, Any, Optional
+
+import humanize
+import pathspec
+import pyperclip
+import tiktoken
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments for CodeSight."""
+    parser = argparse.ArgumentParser(description='Collect and format code for LLM analysis')
+    parser.add_argument('directory', nargs='?', default='.',
+                       help='Project directory (default: current directory)')
+    parser.add_argument('--token-limit', type=int, default=100000,
+                       help='Token limit for output')
+    parser.add_argument('--exclude', nargs='+', default=[],
+                       help='Additional patterns to exclude')
+    parser.add_argument('--include-tests', action='store_true',
+                       help='Include test directories')
+    parser.add_argument('--include-structural', action='store_true',
+                       help='Include structural files like __init__.py, setup.py, etc.')
+    parser.add_argument('--dogfood', action='store_true',
+                       help='Include .codesight directory (for CodeSight development)')
+    parser.add_argument('--output-file', default='.codesight/llm.txt',
+                       help='Output file path (default: .codesight/llm.txt)')
+    parser.add_argument('--prompt', choices=['improvement', 'bugfix'], default='improvement',
+                       help='Type of prompt to use (default: improvement)')
+    return parser.parse_args()
+
+def build_exclusion_patterns(project_root: Path, user_excludes: List[str],
+                           include_tests: bool, include_codesight: bool,
+                           include_structural: bool = False,
+                           output_file: str = 'llm.txt') -> pathspec.PathSpec:
+    """Build patterns for excluding files from collection."""
+    # Start with .gitignore patterns
+    patterns = ['.git']  # Always ignore .git
+
+    gitignore_path = project_root / '.gitignore'
+    if gitignore_path.is_file():
+        with gitignore_path.open('r', encoding='utf-8') as f:
+            patterns.extend(f.readlines())
+
+    # Add standard excludes for code projects
+    standard_excludes = [
+        '__pycache__/',
+        '*.pyc',
+        '*.pyo',
+        '*.so',
+        'build/',
+        'dist/',
+        '*.egg-info/',
+        '.env',
+        '.venv/',
+        'venv/',
+        'env/',
+        '*.log',
+        '.DS_Store',
+    ]
+
+    # By default, exclude .codesight/ directory unless dogfood mode is on
+    if not include_codesight:
+        standard_excludes.append('.codesight/')
+
+    # Add test directories unless explicitly included
+    if not include_tests:
+        standard_excludes.extend([
+            'test/',
+            'tests/',
+            '*_test.py',
+            'test_*.py',
+        ])
+
+    # Add large data file patterns
+    standard_excludes.extend([
+        '*.csv',
+        '*.json',
+        '*.xml',
+        '*.yaml',
+        '*.yml',
+    ])
+
+    # ALWAYS exclude the output file to prevent recursive processing
+    # Both the file name and paths with the file name
+    standard_excludes.extend([
+        output_file,
+        f"*/{output_file}",
+        f".codesight/{output_file}",
+        # Exclude prompts directory (templates don't need to be analyzed)
+        "prompts/",
+        "*/prompts/",
+        ".codesight/prompts/",
+    ])
+
+    # Always exclude these configuration files
+    standard_excludes.extend([
+        ".gitignore",
+        "*/.gitignore",
+        ".csconfig.json",
+        "*/.csconfig.json",
+        "*.bak",
+        "*/*.bak",
+    ])
+
+    # Exclude structural files unless explicitly included
+    if not include_structural:
+        standard_excludes.extend([
+            # Common config files
+            "*.toml",
+            "setup.py",
+            "setup.cfg",
+            "requirements.txt",
+            "LICENSE",
+            "Dockerfile",
+            "docker-compose.yml",
+            "Makefile",
+            # Structural files with minimal content
+            "__init__.py",
+            "*/__init__.py",
+            "__main__.py",
+            "*/__main__.py",
+            "conftest.py",
+            "*/conftest.py",
+        ])
+
+    # Add user excludes
+    patterns.extend(standard_excludes)
+    patterns.extend(user_excludes)
+
+    return pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, patterns)
+
+def process_chunk(chunk: List[Path], project_root: Path,
+                 exclusion_spec: pathspec.PathSpec) -> Dict[Path, List[Tuple[Path, float]]]:
+    """Process a chunk of files to filter and collect metadata."""
+    chunk_result: Dict[Path, List[Tuple[Path, float]]] = {}
+    for file_path in chunk:
+        if not file_path.is_file():
+            continue
+
+        relative_path = file_path.relative_to(project_root)
+
+        # Skip if file matches exclusion patterns
+        if exclusion_spec.match_file(str(relative_path)):
+            continue
+
+        # Get file metadata
+        mtime = file_path.stat().st_mtime
+        parent_dir = file_path.parent
+
+        # Group files by directory
+        chunk_result.setdefault(parent_dir, []).append((file_path, mtime))
+
+    return chunk_result
+
+async def collect_files(project_root: Path,
+                      exclusion_spec: pathspec.PathSpec) -> Dict[Path, List[Tuple[Path, float]]]:
+    """
+    Asynchronously collect and filter files using multiple processes
+    to leverage M-series Mac performance.
+    """
+    dirs_data: Dict[Path, List[Tuple[Path, float]]] = {}
+
+    # Get all potential files first (faster than recursive glob in each process)
+    all_files = list(project_root.rglob('*'))
+
+    # Process files in chunks using process pool
+    chunk_size = 1000  # Adjust based on system memory
+    chunks = [all_files[i:i + chunk_size] for i in range(0, len(all_files), chunk_size)]
+
+    # Process chunks in parallel
+    with ProcessPoolExecutor() as executor:
+        loop = asyncio.get_event_loop()
+        tasks = [
+            loop.run_in_executor(executor, process_chunk, chunk, project_root, exclusion_spec)
+            for chunk in chunks
+        ]
+        chunk_results = await asyncio.gather(*tasks)
+
+    # Merge results
+    for result in chunk_results:
+        for parent_dir, files in result.items():
+            dirs_data.setdefault(parent_dir, []).extend(files)
+
+    return dirs_data
+
+def prepare_sorted_groups(dirs_data: Dict[Path, List[Tuple[Path, float]]]) -> List[Dict[str, Any]]:
+    """Sort directories and files by recency."""
+    group_sort_info = []
+
+    for parent_dir, files_with_mtimes in dirs_data.items():
+        if files_with_mtimes:  # Ensure list isn't empty
+            # Find the most recent modification time in the group
+            max_mtime = max(m for _, m in files_with_mtimes)
+
+            # Add directory info to sort list
+            group_sort_info.append({
+                'dir': parent_dir,
+                'files': files_with_mtimes,
+                'max_mtime': max_mtime
+            })
+
+    # Sort directories by recency (most recent first)
+    group_sort_info.sort(key=lambda item: item['max_mtime'], reverse=True)
+
+    return group_sort_info
+
+def format_relative_time(timestamp: float) -> str:
+    """Convert timestamp to human-readable relative time (e.g., '3 hours ago')"""
+    now = datetime.now()
+    file_time = datetime.fromtimestamp(timestamp)
+    return humanize.naturaltime(now - file_time)
+
+async def process_file(file_path: Path, mtime: float, project_root: Path,
+                   import_pattern: re.Pattern, definition_pattern: re.Pattern,
+                   token_limit: int, total_tokens: int, truncated: bool,
+                   encoder: tiktoken.Encoding) -> Tuple[Optional[str], int, bool]:
+    """Process a single file for output."""
+    try:
+        relative_path = file_path.relative_to(project_root)
+        relative_time = format_relative_time(mtime)
+
+        # Format concise header with relative time
+        header = f"# --- {file_path.name} ({relative_time}) ---"
+
+        # Read file content asynchronously
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as pool:
+            content = await loop.run_in_executor(
+                pool,
+                lambda: file_path.read_text(encoding='utf-8', errors='ignore')
+            )
+
+        # Optimize content to reduce tokens
+        content = optimize_content(content)
+
+        # Check token limit and apply smart truncation if needed
+        file_tokens = len(encoder.encode(content))
+
+        if total_tokens + file_tokens > token_limit:
+            # Apply smart truncation for older files
+            file_time = datetime.fromtimestamp(mtime)
+
+            if datetime.now() - file_time > timedelta(days=7):
+                # For older files, include only imports and definitions
+                imports = import_pattern.findall(content)
+                definitions = definition_pattern.findall(content)
+
+                truncated_content = "\n".join(imports)
+                truncated_content += "\n\n# File truncated - showing only definitions:\n"
+                truncated_content += "\n".join(definitions)
+
+                content = truncated_content
+                truncated = True
+                # Recalculate tokens after truncation
+                file_tokens = len(encoder.encode(content))
+
+        # Only add content if we're under the limit
+        if total_tokens + file_tokens <= token_limit:
+            # Create a more compact header format that uses fewer tokens
+            result = f"\n{header}\n{content}"
+            total_tokens += file_tokens
+            return result, total_tokens, truncated
+        else:
+            return f"\n# {file_path.name}: skipped (token limit)", total_tokens, truncated
+
+    except Exception as e:
+        return f"\n# --- Error reading file: {relative_path} ---\n# Error: {e}", total_tokens, truncated
+
+def optimize_content(content: str) -> str:
+    """Optimize file content to reduce token count without losing meaning."""
+
+    # Remove duplicate blank lines (more than 2 consecutive newlines)
+    content = re.sub(r'\n{3,}', '\n\n', content)
+
+    # Trim trailing whitespace at the end of lines
+    content = re.sub(r"[ \t]+$", "", content, flags=re.MULTILINE)
+
+    # Trim the content but ensure it ends with a newline
+    content = content.strip() + '\n'
+
+    return content
+
+async def build_output(group_sort_info: List[Dict[str, Any]],
+                     project_root: Path,
+                     token_limit: int,
+                     prompt_type: str = 'improvement') -> str:
+    """Optimized output builder using async for file reading operations"""
+    output_parts = []
+
+    # Add prompt from template file based on selected prompt type first
+    # This makes it easier to paste directly into an LLM interface
+    prompt_filename = f"{prompt_type}.md"
+
+    # Check if we're running from within .codesight directory
+    current_dir = Path.cwd().name
+    script_dir = Path(__file__).parent.name
+    in_codesight_dir = current_dir == '.codesight' or script_dir == '.codesight'
+
+    # Try multiple possible locations for the prompt file
+    possible_prompt_paths = [
+        # Current directory / prompts (if we're in .codesight)
+        Path('prompts') / prompt_filename,
+        # Script directory / prompts
+        Path(__file__).parent / 'prompts' / prompt_filename,
+        # Project root / .codesight / prompts (standard path)
+        project_root / '.codesight' / 'prompts' / prompt_filename
+    ]
+
+    # Find the first path that exists
+    prompt_path = None
+    for path in possible_prompt_paths:
+        if path.exists():
+            prompt_path = path
+            break
+
+    # If no prompt path exists, use the standard path as fallback
+    if not prompt_path:
+        prompt_path = project_root / '.codesight' / 'prompts' / prompt_filename
+
+    # Use the prompt file if it exists
+    if prompt_path.exists():
+        prompt_content = prompt_path.read_text(encoding='utf-8')
+        output_parts.append(prompt_content)
+    else:
+        # Fallback to default prompt if file doesn't exist
+        prompt_template = """
+You are an expert software engineer. Analyze the following codebase from my project.
+The goal is to [YOUR GOAL HERE - e.g., find bugs, suggest improvements, implement feature X]
+
+The code is organized by directories, with most recently modified files first.
+Each file shows how recently it was modified to help you focus on recent changes.
+
+Please provide your analysis with specific, actionable feedback.
+"""
+        output_parts.append(prompt_template.strip())
+
+    # Add minimal project info after the prompt
+    output_parts.append(f"\n# CodeSight: {project_root.name} ({datetime.now().strftime('%Y-%m-%d')})")
+
+    # Add compact code structure overview
+    output_parts.append("\n# Files:")
+
+    for group in group_sort_info:
+        relative_dir = group['dir'].relative_to(project_root)
+        dir_name = str(relative_dir) + "/" if str(relative_dir) != '.' else ""
+
+        # Sort files alphabetically for the overview
+        sorted_files_overview = sorted([f for f, _ in group['files']], key=lambda p: p.name)
+        for file_path in sorted_files_overview:
+            output_parts.append(f"# - {dir_name}{file_path.name}")
+
+    # Add concatenated code files
+    output_parts.append("\n# --- Start Code Files ---")
+
+    # Precompile regex patterns for performance
+    import_pattern = re.compile(r'^import.*|^from.*import.*', re.MULTILINE)
+    definition_pattern = re.compile(r'^(def|class)\s+.*:', re.MULTILINE)
+
+    # Initialize token encoder once
+    encoder = tiktoken.get_encoding("cl100k_base")  # OpenAI's encoding
+
+    # Track tokens
+    total_tokens = len(encoder.encode("\n".join(output_parts)))
+    truncated = False
+
+    # Process each directory group
+    for group in group_sort_info:
+        # Sort files within group by recency
+        sorted_files_in_group = sorted(group['files'], key=lambda item: item[1], reverse=True)
+
+        # Get relative directory path for header
+        relative_dir = group['dir'].relative_to(project_root)
+        dir_header = f"\n# Directory: {relative_dir}/"
+        output_parts.append(dir_header)
+
+        # Process files in parallel within this directory
+        tasks = [
+            process_file(
+                file_path, mtime, project_root,
+                import_pattern, definition_pattern,
+                token_limit, total_tokens, truncated, encoder
+            )
+            for file_path, mtime in sorted_files_in_group
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # Update tokens and truncated flag
+        for content, new_total_tokens, new_truncated in results:
+            if content:
+                output_parts.append(content)
+                total_tokens = max(total_tokens, new_total_tokens)
+                truncated = truncated or new_truncated
+
+    if truncated:
+        output_parts.append("\n# Note: Some older files were truncated to stay within token limits.")
+
+    output_parts.append("\n# --- End Code Files ---")
+
+    return "\n".join(output_parts)
+
+async def main_async() -> None:
+    """Main async function to run CodeSight."""
+    args = parse_arguments()
+
+    # Get project root directory
+    project_root = Path(args.directory).resolve()
+
+    # Determine if we're already in the .codesight directory
+    current_dir = Path.cwd().name
+    in_codesight_dir = current_dir == '.codesight'
+
+    # Auto-detect if we're in the codesight project itself
+    is_codesight_project = False
+    if project_root.name == "codesight-python" or in_codesight_dir or (project_root / '.codesight').is_dir() and len(list(project_root.glob('*'))) <= 10:
+        is_codesight_project = True
+        print("Auto-detected CodeSight project - enabling dogfood mode")
+
+    # Use dogfood mode if explicitly enabled or auto-detected
+    dogfood_mode = args.dogfood or is_codesight_project
+
+    # Get output file name for exclusion (extract the file name without the path)
+    output_file_name = Path(args.output_file).name
+
+    # Build exclusion patterns
+    exclusion_spec = build_exclusion_patterns(
+        project_root,
+        args.exclude,
+        args.include_tests,
+        dogfood_mode,
+        args.include_structural,
+        output_file_name
+    )
+
+    # Collect files (async)
+    dirs_data = await collect_files(project_root, exclusion_spec)
+
+    # Sort directories and files by recency
+    group_sort_info = prepare_sorted_groups(dirs_data)
+
+    # Build output (async) with selected prompt type
+    final_output = await build_output(group_sort_info, project_root, args.token_limit, args.prompt)
+
+    # Count tokens
+    encoder = tiktoken.get_encoding("cl100k_base")
+    tokens = len(encoder.encode(final_output))
+
+    # Copy to clipboard
+    pyperclip.copy(final_output)
+
+    # Ensure output always goes to .codesight directory
+    output_path = Path(args.output_file)
+
+    # If not already an absolute path
+    if not output_path.is_absolute():
+        # If path doesn't already include .codesight/ prefix
+        if not str(output_path).startswith('.codesight/') and output_path.parts[0] != '.codesight':
+            # Add .codesight prefix
+            output_path = Path('.codesight') / output_path
+
+    # Get absolute path
+    if not output_path.is_absolute():
+        output_file = project_root / output_path
+    else:
+        output_file = output_path
+
+    print(f"Saving output to: {output_file}")
+
+    # Create directory if it doesn't exist
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(final_output, encoding='utf-8')
+
+    # Print summary
+    total_files = sum(len(group['files']) for group in group_sort_info)
+    print(f"CodeSight: Processed {total_files} files ({tokens} tokens)")
+    print(f"Content copied to clipboard!")
+    print(f"Output saved to {output_file}")
+
+def main() -> None:
+    """Entry point that handles the async event loop"""
+    # Configure asyncio to use the right event loop policy for macOS
+    if hasattr(asyncio, 'WindowsSelectorEventLoopPolicy'):
+        # Windows-specific event loop policy
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    else:
+        try:
+            # macOS-specific event loop policy improves performance on M-series Macs
+            asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+        except ImportError:
+            # Fall back to default policy
+            pass
+
+    # Run the async main function
+    asyncio.run(main_async())
+
+if __name__ == "__main__":
+    main()
+
+
+# --- CHANGELOG.md (9 minutes ago) ---
+# CodeSight Python Changelog
+
+## v0.1.1 (2025-04-06)
+
+### Added
+- New `--include-structural` flag to optionally include structural files like __init__.py
+- XDG-compliant configuration system for better cross-platform support
+- Token optimization features to reduce output size
+
+### Changed
+- Improved file exclusion logic to prevent recursive processing
+- More concise file structure representation in output
+- Automatically exclude configuration files (.gitignore, etc.)
+- Exclude backup files (*.bak) from processing
+- Better error handling and path validation
+
+### Fixed
+- Fixed recursive processing of llm.txt file
+- Fixed path handling in developer mode configuration
+
+## v0.1.0 (2025-04-01)
+
+- Initial release
+
+
+# Directory: bin/
+
+# --- cs-dev (19 minutes ago) ---
+#!/bin/bash
+# CodeSight developer mode launcher
+# This script is specifically for working on CodeSight itself
+# RUN THIS ONLY FROM WITHIN THE .codesight DIRECTORY
+
+# Use XDG config path if available, otherwise fallback to HOME
+if [ -n "${XDG_CONFIG_HOME}" ]; then
+    CONFIG_DIR="${XDG_CONFIG_HOME}/codesight"
+else
+    CONFIG_DIR="${HOME}/.config/codesight"
+fi
+
+# Ensure config directory exists
+mkdir -p "${CONFIG_DIR}"
+
+# Config file for development settings
+CONFIG_FILE="${CONFIG_DIR}/dev-config"
+
+# Try to load config if it exists
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    # Create config file with default paths and explanatory comments
+    cat > "$CONFIG_FILE" << EOF
+# CodeSight developer configuration
+# This file is automatically generated but can be modified to suit your environment
+# Last updated: $(date)
+
+# Path to the CodeSight directory (where collect_code.py resides)
+CODESIGHT_DIR="$(pwd)"
+
+# Path to the collect_code.py script
+COLLECT_CODE_SCRIPT="\${CODESIGHT_DIR}/collect_code.py"
+
+# Output file name (relative to current directory when running cs-dev)
+OUTPUT_FILE="llm.txt"
+EOF
+
+    # Load the config we just created
+    source "$CONFIG_FILE"
+
+    echo "Created default config at $CONFIG_FILE"
+    echo "Please verify the paths are correct for your environment."
+fi
+
+# Verify we're in the .codesight directory
+CURRENT_DIR="$(pwd)"
+if [[ "$CURRENT_DIR" != *"/.codesight" ]]; then
+    echo "ERROR: cs-dev must be run from within the .codesight directory!"
+    echo "Please cd into the .codesight directory and try again."
+    exit 1
+fi
+
+# Debug verification of paths
+if [ ! -f "$COLLECT_CODE_SCRIPT" ]; then
+    echo "ERROR: Could not find collect_code.py at $COLLECT_CODE_SCRIPT"
+    echo "Please edit $CONFIG_FILE to set the correct path."
+    exit 1
+fi
+
+# Use a virtual environment in the .codesight directory
+VENV_DIR="$CODESIGHT_DIR/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Setting up virtual environment for CodeSight development..."
+
+    # Install UV if needed
+    if ! command -v uv &> /dev/null; then
+        echo "Installing uv..."
+        pip install uv
+    fi
+
+    # Create virtual environment
+    cd "$CODESIGHT_DIR"
+    uv venv
+    source "$VENV_DIR/bin/activate"
+
+    # Install dependencies
+    echo "Installing dependencies..."
+    uv pip install tiktoken openai pytest typer more-itertools humanize pathspec pyperclip
+
+    # Return to original directory
+    cd "$CURRENT_DIR"
+else
+    # Activate existing environment
+    source "$VENV_DIR/bin/activate"
+fi
+
+# Process arguments to filter out --debug
+PYTHON_ARGS=()
+DEBUG=false
+
+for arg in "$@"; do
+    if [[ "$arg" == "--debug" ]]; then
+        DEBUG=true
+    else
+        PYTHON_ARGS+=("$arg")
+    fi
+done
+
+# Print debug info
+if [[ "$DEBUG" == "true" ]]; then
+    echo "CodeSight Developer Mode Debug Info:"
+    echo "  Current directory: $CURRENT_DIR"
+    echo "  CodeSight directory: $CODESIGHT_DIR"
+    echo "  Virtual env: $VENV_DIR"
+    echo "  Python script: $COLLECT_CODE_SCRIPT"
+fi
+
+# Set default output file if not defined in config
+OUTPUT_FILE="${OUTPUT_FILE:-llm.txt}"
+
+# Run CodeSight in dogfood mode - analyze the current directory's contents
+python "$COLLECT_CODE_SCRIPT" "." --dogfood --prompt improvement --output-file "$OUTPUT_FILE" "${PYTHON_ARGS[@]}"
+
+echo "Developer mode completed successfully"
+
+
+# --- cs (42 minutes ago) ---
+#!/bin/bash
+# CodeSight quick launcher
+
+# This is a simplified version focusing on reliability and simplicity
+
+# Find the codesight installation directory
+SCRIPT_PATH="$0"
+if [[ -n "${BASH_SOURCE[0]}" ]]; then
+    # For bash when script is sourced
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+fi
+
+# Get absolute path of the script - with fallbacks for symlinks
+if command -v realpath &> /dev/null; then
+    # Use realpath if available
+    SCRIPT_DIR=$(dirname "$(realpath "$SCRIPT_PATH")")
+else
+    # Manual resolution
+    SOURCE="$SCRIPT_PATH"
+    while [ -h "$SOURCE" ]; do
+        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+fi
+
+CODESIGHT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Basic validation
+if [ ! -f "$SCRIPT_DIR/cs.py" ]; then
+    echo "Error: CodeSight installation is incomplete or corrupted"
+    echo "Cannot find cs.py at $SCRIPT_DIR"
+    exit 1
+fi
+
+# Create and use a virtual environment in the current project
+PROJECT_DIR="$(pwd)"
+VENV_DIR="$PROJECT_DIR/.venv"
+
+# Handle virtual environment
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Setting up virtual environment for project at $PROJECT_DIR..."
+
+    # Install UV if needed
+    if ! command -v uv &> /dev/null; then
+        echo "Installing uv..."
+        pip install uv
+    fi
+
+    # Create and activate virtual environment
+    uv venv
+    source "$VENV_DIR/bin/activate"
+
+    # Install dependencies
+    echo "Installing dependencies..."
+    uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
+else
+    # Activate existing environment
+    source "$VENV_DIR/bin/activate"
+fi
+
+# Print debugging info if requested
+if [[ "$*" == *"--debug"* ]]; then
+    echo "CodeSight Debug Info:"
+    echo "  Script directory: $SCRIPT_DIR"
+    echo "  CodeSight directory: $CODESIGHT_DIR"
+    echo "  Project directory: $PROJECT_DIR"
+    echo "  Virtual env: $VENV_DIR"
+    echo "  Python script: $SCRIPT_DIR/cs.py"
+fi
+
+# Run the CS command
+python "$SCRIPT_DIR/cs.py" "$@"
+
+
+# --- install.sh (42 minutes ago) ---
+#!/bin/bash
+# CodeSight installer - Creates symlink to make 'cs' available globally
+
+# Make sure we find the real path of this script
+if command -v realpath &> /dev/null; then
+    # Use realpath if available (most Linux distros)
+    REAL_PATH=$(realpath "${BASH_SOURCE[0]}")
+    SCRIPT_DIR=$(dirname "$REAL_PATH")
+elif command -v readlink &> /dev/null && [[ $(uname) != "Darwin" || $(readlink -f / 2>/dev/null) ]]; then
+    # Try readlink -f (works on Linux and some macOS)
+    REAL_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+    SCRIPT_DIR=$(dirname "$REAL_PATH")
+else
+    # Fall back to manual resolution for macOS without proper tools
+    SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "$SOURCE" ]; do
+        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+fi
+
+CS_SCRIPT="$SCRIPT_DIR/cs"
+
+# Verify files exist
+if [ ! -f "$CS_SCRIPT" ]; then
+    echo "Error: CS script not found at $CS_SCRIPT"
+    echo "This installer must be run from the .codesight/bin directory"
+    exit 1
+fi
+
+if [ ! -f "$SCRIPT_DIR/cs.py" ]; then
+    echo "Error: cs.py not found at $SCRIPT_DIR"
+    echo "This installer must be run from the .codesight/bin directory"
+    exit 1
+fi
+
+# Make scripts executable
+chmod +x "$CS_SCRIPT" "$SCRIPT_DIR/cs.py"
+
+# Determine installation directory based on macOS best practices
+# First try /usr/local/bin (preferred), then fall back to ~/bin
+if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
+    # User has write access to /usr/local/bin (preferred)
+    INSTALL_DIR="/usr/local/bin"
+elif [ -d "/opt/homebrew/bin" ] && [ -w "/opt/homebrew/bin" ]; then
+    # Homebrew on Apple Silicon
+    INSTALL_DIR="/opt/homebrew/bin"
+elif [ -d "$HOME/bin" ]; then
+    # ~/bin exists, use it
+    INSTALL_DIR="$HOME/bin"
+else
+    # Create ~/bin
+    mkdir -p "$HOME/bin"
+    INSTALL_DIR="$HOME/bin"
+
+    # Add to PATH if needed (check both common shell config files)
+    if ! grep -q "$HOME/bin" "$HOME/.bashrc" 2>/dev/null && ! grep -q "$HOME/bin" "$HOME/.zshrc" 2>/dev/null; then
+        if [ -f "$HOME/.zshrc" ]; then
+            echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.zshrc"
+            echo "Added $HOME/bin to PATH in .zshrc"
+            echo "Run 'source ~/.zshrc' to update your current shell"
+        elif [ -f "$HOME/.bashrc" ]; then
+            echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
+            echo "Added $HOME/bin to PATH in .bashrc"
+            echo "Run 'source ~/.bashrc' to update your current shell"
+        else
+            # Create .zshrc if neither exists (macOS default is zsh)
+            echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.zshrc"
+            echo "Created .zshrc and added $HOME/bin to PATH"
+            echo "Run 'source ~/.zshrc' to update your current shell"
+        fi
+    fi
+fi
+
+# Check if already installed and remove old symlink
+if [ -L "$INSTALL_DIR/cs" ]; then
+    echo "CodeSight already installed. Updating symlink..."
+    rm "$INSTALL_DIR/cs"
+elif [ -e "$INSTALL_DIR/cs" ]; then
+    echo "Warning: $INSTALL_DIR/cs exists but is not a symlink."
+    echo "Backing up to $INSTALL_DIR/cs.bak and replacing..."
+    mv "$INSTALL_DIR/cs" "$INSTALL_DIR/cs.bak"
+fi
+
+# Use a wrapper script instead of a symlink for better reliability
+echo "Creating wrapper script at $INSTALL_DIR/cs..."
+cat > "$INSTALL_DIR/cs" << EOF
+#!/bin/bash
+# CodeSight wrapper script
+"$CS_SCRIPT" "\$@"
+EOF
+chmod +x "$INSTALL_DIR/cs"
+
+# Create dev script wrapper too
+echo "Creating developer wrapper at $INSTALL_DIR/cs-dev..."
+cat > "$INSTALL_DIR/cs-dev" << EOF
+#!/bin/bash
+# CodeSight developer mode wrapper script
+"$SCRIPT_DIR/cs-dev" "\$@"
+EOF
+chmod +x "$INSTALL_DIR/cs-dev"
+
+# Simple validation
+if [ ! -x "$INSTALL_DIR/cs" ]; then
+    echo "Error: Failed to create executable wrapper script."
+    echo "Try running: sudo ln -sf \"$CS_SCRIPT\" /usr/local/bin/cs"
+    exit 1
+fi
+
+echo "CodeSight installed successfully to $INSTALL_DIR/cs"
+echo ""
+echo "Usage examples:"
+echo "  cs                    # Analyze current directory with improvement prompt"
+echo "  cs -b \"Description\"   # Analyze with bug prompt and custom description"
+echo "  cs -c                 # Configure CodeSight settings"
+echo "  cs -i                 # Initialize CodeSight in the current project"
+echo ""
+echo "Project setup:"
+echo "  cd /path/to/your/project"
+echo "  cs -i                 # Initialize project-specific config"
+echo "  cs                    # Then just run 'cs' without arguments"
+echo ""
+echo "For CodeSight project developers:"
+echo "  cd /path/to/codesight-python/.codesight"
+echo "  cs .                  # Analyze CodeSight itself (dogfood mode)"
+echo ""
+echo "Debugging:"
+echo "  cs --debug            # Show debug information about paths and configuration"
+
+
+# --- cs.py (an hour ago) ---
+#!/usr/bin/env python
+"""
+CodeSight CLI - Quick shortcut for running CodeSight
+"""
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+import subprocess
+
+def main():
+    # Define CLI arguments
+    parser = argparse.ArgumentParser(description='CodeSight - Code analysis tool')
+    parser.add_argument('directory', nargs='?', default='.',
+                        help='Directory to analyze (default: current directory)')
+    parser.add_argument('-b', '--bug', nargs='?', const='',
+                        help='Run in bug mode with optional description')
+    parser.add_argument('-c', '--config', action='store_true',
+                        help='Create or edit config file')
+    parser.add_argument('-i', '--init', action='store_true',
+                        help='Initialize CodeSight in the current project')
+    parser.add_argument('--no-venv', action='store_true',
+                        help='Skip virtual environment activation')
+
+    args = parser.parse_args()
+
+    # Paths
+    script_dir = Path(__file__).parent.parent
+    current_dir = Path.cwd()
+
+    # Handle initialization if requested
+    if args.init:
+        initialize_codesight(current_dir, script_dir)
+        return
+
+    # Look for project-specific config first, then fall back to global
+    project_config_path = current_dir / '.codesight-config.json'
+    global_config_path = script_dir / '.csconfig.json'
+
+    config_path = project_config_path if project_config_path.exists() else global_config_path
+
+    # Load or create config
+    if args.config:
+        create_or_edit_config(config_path, is_project_config=config_path == project_config_path)
+        return
+
+    config = load_config(config_path)
+
+    # Determine if we're in the CodeSight project
+    repo_root = find_repo_root(current_dir)
+    is_codesight_project = is_in_codesight_project(repo_root)
+
+    # Set mode and flags
+    prompt_type = 'bugfix' if args.bug is not None else 'improvement'
+    dogfood_flag = '--dogfood' if is_codesight_project or config.get('always_dogfood', False) else ''
+
+    # If bug description provided, update the bugfix template
+    if args.bug is not None and args.bug:
+        update_bug_description(script_dir, args.bug)
+
+    # Use configured directory if none specified and config has a default
+    directory = args.directory
+    if directory == '.' and config.get('default_directory'):
+        directory = config.get('default_directory')
+
+    # Construct command
+    collect_script = script_dir / 'collect_code.py'
+    cmd = f'python {collect_script} {directory} --prompt {prompt_type} {dogfood_flag}'
+
+    # Run the command
+    print(f"Running: {cmd}")
+    os.system(cmd)
+
+def initialize_codesight(current_dir, script_dir):
+    """Initialize CodeSight in the current project"""
+    print(f"Initializing CodeSight in {current_dir}...")
+
+    # Create project config
+    config_path = current_dir / '.codesight-config.json'
+
+    # Default project config
+    default_config = {
+        "default_directory": ".",
+        "always_dogfood": False,
+        "token_limit": 100000
+    }
+
+    # Write project config
+    with open(config_path, 'w') as f:
+        json.dump(default_config, f, indent=2)
+
+    print(f"Created project config at {config_path}")
+    print("You can now run 'cs' without arguments to analyze this project.")
+
+def find_repo_root(path):
+    """Find the repository root by looking for .git directory"""
+    current = path
+    while current != current.parent:
+        if (current / '.git').exists():
+            return current
+        current = current.parent
+    return path  # Default to current if not found
+
+def is_in_codesight_project(path):
+    """Determine if we're in the CodeSight project"""
+    if path.name == 'codesight-python':
+        return True
+    if (path / '.codesight').exists() and len(list(path.glob('*'))) < 15:
+        return True
+    return False
+
+def load_config(config_path):
+    """Load config or create default"""
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+
+    # Default config
+    default_config = {
+        "always_dogfood": False,
+        "token_limit": 100000
+    }
+
+    # Write default config
+    with open(config_path, 'w') as f:
+        json.dump(default_config, f, indent=2)
+
+    return default_config
+
+def create_or_edit_config(config_path, is_project_config=False):
+    """Create or edit the config file"""
+    config = load_config(config_path)
+
+    print("CodeSight Configuration:")
+    print("========================")
+    print(f"Editing {'project-specific' if is_project_config else 'global'} configuration")
+
+    # For project configs, allow setting default directory
+    if is_project_config:
+        default_dir = config.get('default_directory', '.')
+        new_dir = input(f"Default directory to analyze [{default_dir}]: ").strip()
+        if new_dir:
+            config['default_directory'] = new_dir
+        elif 'default_directory' not in config:
+            config['default_directory'] = default_dir
+
+    # Update config interactively
+    config['always_dogfood'] = input_yes_no(
+        "Always run in dogfood mode? (y/n): ",
+        config.get('always_dogfood', False)
+    )
+
+    config['token_limit'] = input_number(
+        "Token limit (default: 100000): ",
+        config.get('token_limit', 100000)
+    )
+
+    # Write updated config
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+
+    print(f"\nConfiguration saved to {config_path}")
+
+    if is_project_config:
+        print("To analyze this project, simply run 'cs' without arguments.")
+
+def input_yes_no(prompt, default):
+    """Get yes/no input with default"""
+    default_str = 'y' if default else 'n'
+    val = input(f"{prompt} [{default_str}] ").strip().lower()
+    if not val:
+        return default
+    return val.startswith('y')
+
+def input_number(prompt, default):
+    """Get number input with default"""
+    val = input(f"{prompt} [{default}] ").strip()
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        print("Invalid number, using default.")
+        return default
+
+def update_bug_description(script_dir, bug_description):
+    """Update the bugfix template with the provided description"""
+    bugfix_path = script_dir / 'prompts' / 'bugfix.md'
+
+    if not bugfix_path.exists():
+        print(f"Warning: Bugfix template not found at {bugfix_path}")
+        return
+
+    content = bugfix_path.read_text()
+
+    # Replace placeholders with the bug description
+    content = content.replace('PLACEHOLDER_BUG_DESCRIPTION', bug_description)
+    content = content.replace('PLACEHOLDER_EXPECTED_BEHAVIOR',
+                             "Expected behavior should be inferred from the bug description.")
+    content = content.replace('PLACEHOLDER_REPRODUCTION_STEPS',
+                             "Please analyze the code to determine reproduction steps.")
+
+    # Write to a temporary file that will be used just for this run
+    temp_path = script_dir / 'prompts' / 'bugfix_temp.md'
+    temp_path.write_text(content)
+
+    # Back up the original
+    backup_path = script_dir / 'prompts' / 'bugfix_original.md'
+    if not backup_path.exists():
+        bugfix_path.rename(backup_path)
+
+    # Use the temporary file
+    temp_path.rename(bugfix_path)
+
+if __name__ == "__main__":
+    main()
+
+
+# --- End Code Files ---

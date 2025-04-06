@@ -84,29 +84,29 @@ elif [ -e "$INSTALL_DIR/cs" ]; then
     mv "$INSTALL_DIR/cs" "$INSTALL_DIR/cs.bak"
 fi
 
-# Create symlink with absolute path
-ln -s "$CS_SCRIPT" "$INSTALL_DIR/cs"
-
-# Create test symlink to verify it works
-TEST_OUTPUT=$(cd /tmp && "$INSTALL_DIR/cs" --debug 2>&1 || echo "FAILED")
-if [[ "$TEST_OUTPUT" == *"FAILED"* || "$TEST_OUTPUT" != *"CodeSight Debug Info"* ]]; then
-    echo "Warning: Symlink test failed. Using alternate installation method..."
-    
-    # Create a wrapper script instead of a symlink
-    cat > "$INSTALL_DIR/cs" << EOF
+# Use a wrapper script instead of a symlink for better reliability
+echo "Creating wrapper script at $INSTALL_DIR/cs..."
+cat > "$INSTALL_DIR/cs" << EOF
 #!/bin/bash
 # CodeSight wrapper script
 "$CS_SCRIPT" "\$@"
 EOF
-    chmod +x "$INSTALL_DIR/cs"
-    
-    # Test the wrapper
-    TEST_OUTPUT=$(cd /tmp && "$INSTALL_DIR/cs" --debug 2>&1 || echo "WRAPPER_FAILED")
-    if [[ "$TEST_OUTPUT" == *"WRAPPER_FAILED"* ]]; then
-        echo "Error: Installation failed. Please run the following manually:"
-        echo "sudo ln -sf \"$CS_SCRIPT\" /usr/local/bin/cs"
-        exit 1
-    fi
+chmod +x "$INSTALL_DIR/cs"
+
+# Create dev script wrapper too
+echo "Creating developer wrapper at $INSTALL_DIR/cs-dev..."
+cat > "$INSTALL_DIR/cs-dev" << EOF
+#!/bin/bash
+# CodeSight developer mode wrapper script
+"$SCRIPT_DIR/cs-dev" "\$@"
+EOF
+chmod +x "$INSTALL_DIR/cs-dev"
+
+# Simple validation
+if [ ! -x "$INSTALL_DIR/cs" ]; then
+    echo "Error: Failed to create executable wrapper script."
+    echo "Try running: sudo ln -sf \"$CS_SCRIPT\" /usr/local/bin/cs"
+    exit 1
 fi
 
 echo "CodeSight installed successfully to $INSTALL_DIR/cs"

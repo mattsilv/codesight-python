@@ -1,43 +1,46 @@
 #!/bin/bash
 # CodeSight quick launcher
 
-# Find the real path of the script, following symlinks
-# This ensures we always find the actual installation location
+# This is a simplified version focusing on reliability and simplicity
 
-# First try the readlink method (Linux, some macOS)
-if command -v readlink &> /dev/null && [[ $(uname) != "Darwin" || $(readlink -f / 2>/dev/null) ]]; then
-    # readlink -f works
-    REAL_SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+# Find the codesight installation directory
+SCRIPT_PATH="$0"
+if [[ -n "${BASH_SOURCE[0]}" ]]; then
+    # For bash when script is sourced
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+fi
+
+# Get absolute path of the script - with fallbacks for symlinks
+if command -v realpath &> /dev/null; then
+    # Use realpath if available
+    SCRIPT_DIR=$(dirname "$(realpath "$SCRIPT_PATH")")
 else
-    # For macOS without readlink -f support
-    # Resolve $SOURCE until the file is no longer a symlink
-    SOURCE="${BASH_SOURCE[0]}"
+    # Manual resolution
+    SOURCE="$SCRIPT_PATH"
     while [ -h "$SOURCE" ]; do
         DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
         SOURCE="$(readlink "$SOURCE")"
-        # If $SOURCE was a relative symlink, resolve it relative to the path where the symlink file was located
         [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
     done
-    REAL_SCRIPT_PATH="$SOURCE"
+    SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 fi
 
-# Get the real script directories
-SCRIPT_DIR="$( cd -P "$( dirname "$REAL_SCRIPT_PATH" )" && pwd )"
 CODESIGHT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Verify that the script directory is valid
+# Basic validation
 if [ ! -f "$SCRIPT_DIR/cs.py" ]; then
-    echo "Error: Cannot find cs.py in $SCRIPT_DIR"
-    echo "This usually happens when the symlink is correct but the source files moved"
-    echo "Please reinstall CodeSight or update your symlink"
+    echo "Error: CodeSight installation is incomplete or corrupted"
+    echo "Cannot find cs.py at $SCRIPT_DIR"
     exit 1
 fi
 
-# Check if virtual environment exists
-VENV_DIR="$CODESIGHT_DIR/.venv"
+# Create and use a virtual environment in the current project
+PROJECT_DIR="$(pwd)"
+VENV_DIR="$PROJECT_DIR/.venv"
+
+# Handle virtual environment
 if [ ! -d "$VENV_DIR" ]; then
-    echo "Setting up virtual environment for CodeSight..."
-    cd "$CODESIGHT_DIR" || exit 1
+    echo "Setting up virtual environment for project at $PROJECT_DIR..."
     
     # Install UV if needed
     if ! command -v uv &> /dev/null; then
@@ -60,9 +63,9 @@ fi
 # Print debugging info if requested
 if [[ "$*" == *"--debug"* ]]; then
     echo "CodeSight Debug Info:"
-    echo "  Real script path: $REAL_SCRIPT_PATH"
     echo "  Script directory: $SCRIPT_DIR"
     echo "  CodeSight directory: $CODESIGHT_DIR"
+    echo "  Project directory: $PROJECT_DIR"
     echo "  Virtual env: $VENV_DIR"
     echo "  Python script: $SCRIPT_DIR/cs.py"
 fi

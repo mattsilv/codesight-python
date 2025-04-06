@@ -36,6 +36,3 @@ ENV/
 # OS specific
 .DS_Store
 Thumbs.db
-
-# CodeSight output files
-llm.txt

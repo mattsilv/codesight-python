@@ -1,7 +1,26 @@
 #!/usr/bin/env python
 """
 CodeSight: Collects and formats code for LLM analysis, optimized for M-series Macs.
+
+This module provides functionality to recursively collect code files from a
+project, format them with syntax highlighting, and prepare them for analysis
+by large language models (LLMs). It's specifically optimized for performance
+on Apple M-series processors using process-based parallelism.
+
+Key Features:
+- Asynchronous file processing with multiprocessing
+- Smart file selection based on recency and relevance
+- Automatic token counting and limitation
+- Integration with common version control exclusion patterns
+- Clipboard integration for easy pasting into LLM interfaces
+
+Usage:
+    python collect_code.py [directory] [options]
+
+The output is saved to .codesight/llm.txt by default and copied to clipboard.
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -9,7 +28,8 @@ import re
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, Coroutine, Sequence, Pattern, Callable
+from dataclasses import dataclass
 
 import humanize
 import pathspec
@@ -17,13 +37,51 @@ import pyperclip
 import tiktoken
 
 
+@dataclass
+class FileMetadata:
+    """Metadata for a single file in the project."""
+    path: Path
+    mtime: float
+
+
+@dataclass
+class DirectoryGroup:
+    """Group of files within a directory with metadata."""
+    path: Path
+    files: list[FileMetadata]
+    max_mtime: float
+
+# Constants
+CHUNK_SIZE = 1000
+DEFAULT_TOKEN_LIMIT = 100_000
+TRUNCATION_DAYS_THRESHOLD = 7
+DEFAULT_OUTPUT_FILE = '.codesight/llm.txt'
+DEFAULT_ENCODING = "cl100k_base"  # OpenAI's encoding
+
+
 def parse_arguments() -> argparse.Namespace:
-    """Parse command line arguments for CodeSight."""
+    """
+    Parse command line arguments for CodeSight.
+    
+    Args:
+        None
+        
+    Returns:
+        argparse.Namespace: Parsed command line arguments with the following attributes:
+            directory (str): Project directory to analyze
+            token_limit (int): Maximum token limit for output
+            exclude (List[str]): Additional patterns to exclude
+            include_tests (bool): Whether to include test directories
+            include_structural (bool): Whether to include structural files
+            dogfood (bool): Whether to include .codesight directory
+            output_file (str): Output file path
+            prompt (str): Type of prompt to use
+    """
     parser = argparse.ArgumentParser(description='Collect and format code for LLM analysis')
     parser.add_argument('directory', nargs='?', default='.', 
                        help='Project directory (default: current directory)')
-    parser.add_argument('--token-limit', type=int, default=100000, 
-                       help='Token limit for output')
+    parser.add_argument('--token-limit', type=int, default=DEFAULT_TOKEN_LIMIT, 
+                       help=f'Token limit for output (default: {DEFAULT_TOKEN_LIMIT})')
     parser.add_argument('--exclude', nargs='+', default=[], 
                        help='Additional patterns to exclude')
     parser.add_argument('--include-tests', action='store_true', 
@@ -32,18 +90,35 @@ def parse_arguments() -> argparse.Namespace:
                        help='Include structural files like __init__.py, setup.py, etc.')
     parser.add_argument('--dogfood', action='store_true',
                        help='Include .codesight directory (for CodeSight development)')
-    parser.add_argument('--output-file', default='.codesight/llm.txt',
-                       help='Output file path (default: .codesight/llm.txt)')
+    parser.add_argument('--output-file', default=DEFAULT_OUTPUT_FILE,
+                       help=f'Output file path (default: {DEFAULT_OUTPUT_FILE})')
     parser.add_argument('--prompt', choices=['improvement', 'bugfix'], default='improvement',
                        help='Type of prompt to use (default: improvement)')
     return parser.parse_args()
 
 
-def build_exclusion_patterns(project_root: Path, user_excludes: List[str], 
-                           include_tests: bool, include_codesight: bool,
-                           include_structural: bool = False,
-                           output_file: str = 'llm.txt') -> pathspec.PathSpec:
-    """Build patterns for excluding files from collection."""
+def build_exclusion_patterns(
+    project_root: Path, 
+    user_excludes: list[str], 
+    include_tests: bool, 
+    include_codesight: bool,
+    include_structural: bool = False,
+    output_file: str = 'llm.txt'
+) -> pathspec.PathSpec:
+    """
+    Build patterns for excluding files from collection.
+    
+    Args:
+        project_root: Root directory of the project
+        user_excludes: Additional patterns specified by the user to exclude
+        include_tests: Whether to include test directories
+        include_codesight: Whether to include the .codesight directory
+        include_structural: Whether to include structural files like __init__.py
+        output_file: Name of the output file to exclude from processing
+        
+    Returns:
+        pathspec.PathSpec: Compiled exclusion pattern specification
+    """
     # Start with .gitignore patterns
     patterns = ['.git']  # Always ignore .git
 
@@ -141,10 +216,23 @@ def build_exclusion_patterns(project_root: Path, user_excludes: List[str],
     return pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, patterns)
 
 
-def process_chunk(chunk: List[Path], project_root: Path, 
-                 exclusion_spec: pathspec.PathSpec) -> Dict[Path, List[Tuple[Path, float]]]:
-    """Process a chunk of files to filter and collect metadata."""
-    chunk_result: Dict[Path, List[Tuple[Path, float]]] = {}
+def process_chunk(
+    chunk: list[Path], 
+    project_root: Path, 
+    exclusion_spec: pathspec.PathSpec
+) -> dict[Path, list[FileMetadata]]:
+    """
+    Process a chunk of files to filter and collect metadata.
+    
+    Args:
+        chunk: List of file paths to process
+        project_root: Root directory of the project
+        exclusion_spec: Compiled exclusion patterns
+        
+    Returns:
+        dict: Mapping of directory paths to lists of FileMetadata objects
+    """
+    chunk_result: dict[Path, list[FileMetadata]] = {}
     for file_path in chunk:
         if not file_path.is_file():
             continue
@@ -158,27 +246,38 @@ def process_chunk(chunk: List[Path], project_root: Path,
         # Get file metadata
         mtime = file_path.stat().st_mtime
         parent_dir = file_path.parent
+        
+        # Create FileMetadata object
+        file_metadata = FileMetadata(path=file_path, mtime=mtime)
 
         # Group files by directory
-        chunk_result.setdefault(parent_dir, []).append((file_path, mtime))
+        chunk_result.setdefault(parent_dir, []).append(file_metadata)
 
     return chunk_result
 
 
-async def collect_files(project_root: Path, 
-                      exclusion_spec: pathspec.PathSpec) -> Dict[Path, List[Tuple[Path, float]]]:
+async def collect_files(
+    project_root: Path, 
+    exclusion_spec: pathspec.PathSpec
+) -> dict[Path, list[FileMetadata]]:
     """
     Asynchronously collect and filter files using multiple processes
     to leverage M-series Mac performance.
+    
+    Args:
+        project_root: Root directory of the project
+        exclusion_spec: Compiled exclusion patterns
+        
+    Returns:
+        dict: Mapping of directory paths to lists of FileMetadata objects
     """
-    dirs_data: Dict[Path, List[Tuple[Path, float]]] = {}
+    dirs_data: dict[Path, list[FileMetadata]] = {}
 
     # Get all potential files first (faster than recursive glob in each process)
     all_files = list(project_root.rglob('*'))
 
     # Process files in chunks using process pool
-    chunk_size = 1000  # Adjust based on system memory
-    chunks = [all_files[i:i + chunk_size] for i in range(0, len(all_files), chunk_size)]
+    chunks = [all_files[i:i + CHUNK_SIZE] for i in range(0, len(all_files), CHUNK_SIZE)]
 
     # Process chunks in parallel
     with ProcessPoolExecutor() as executor:
@@ -197,40 +296,85 @@ async def collect_files(project_root: Path,
     return dirs_data
 
 
-def prepare_sorted_groups(dirs_data: Dict[Path, List[Tuple[Path, float]]]) -> List[Dict[str, Any]]:
-    """Sort directories and files by recency."""
-    group_sort_info = []
+def prepare_sorted_groups(
+    dirs_data: dict[Path, list[FileMetadata]]
+) -> list[DirectoryGroup]:
+    """
+    Sort directories and files by recency.
+    
+    Args:
+        dirs_data: Mapping of directory paths to lists of FileMetadata objects
+        
+    Returns:
+        list[DirectoryGroup]: List of directory groups sorted by recency
+    """
+    directory_groups: list[DirectoryGroup] = []
 
-    for parent_dir, files_with_mtimes in dirs_data.items():
-        if files_with_mtimes:  # Ensure list isn't empty
+    for parent_dir, files in dirs_data.items():
+        if files:  # Ensure list isn't empty
             # Find the most recent modification time in the group
-            max_mtime = max(m for _, m in files_with_mtimes)
+            max_mtime = max(file.mtime for file in files)
 
-            # Add directory info to sort list
-            group_sort_info.append({
-                'dir': parent_dir,
-                'files': files_with_mtimes,
-                'max_mtime': max_mtime
-            })
+            # Create DirectoryGroup object
+            directory_group = DirectoryGroup(
+                path=parent_dir,
+                files=files,
+                max_mtime=max_mtime
+            )
+            directory_groups.append(directory_group)
 
     # Sort directories by recency (most recent first)
-    group_sort_info.sort(key=lambda item: item['max_mtime'], reverse=True)
+    directory_groups.sort(key=lambda group: group.max_mtime, reverse=True)
 
-    return group_sort_info
+    return directory_groups
 
 
 def format_relative_time(timestamp: float) -> str:
-    """Convert timestamp to human-readable relative time (e.g., '3 hours ago')"""
+    """
+    Convert timestamp to human-readable relative time (e.g., '3 hours ago').
+    
+    Args:
+        timestamp: Unix timestamp (seconds since epoch)
+        
+    Returns:
+        str: Human-readable relative time string
+    """
     now = datetime.now()
     file_time = datetime.fromtimestamp(timestamp)
     return humanize.naturaltime(now - file_time)
 
 
-async def process_file(file_path: Path, mtime: float, project_root: Path, 
-                   import_pattern: re.Pattern, definition_pattern: re.Pattern,
-                   token_limit: int, total_tokens: int, truncated: bool,
-                   encoder: tiktoken.Encoding) -> Tuple[Optional[str], int, bool]:
-    """Process a single file for output."""
+async def process_file(
+    file_path: Path, 
+    mtime: float, 
+    project_root: Path, 
+    import_pattern: Pattern[str], 
+    definition_pattern: Pattern[str],
+    token_limit: int, 
+    total_tokens: int, 
+    truncated: bool,
+    encoder: tiktoken.Encoding
+) -> tuple[Optional[str], int, bool]:
+    """
+    Process a single file for output.
+    
+    Args:
+        file_path: Path to the file to process
+        mtime: Modification time of the file
+        project_root: Root directory of the project
+        import_pattern: Regex pattern for matching import statements
+        definition_pattern: Regex pattern for matching function/class definitions
+        token_limit: Maximum token limit for the output
+        total_tokens: Current total token count
+        truncated: Whether truncation has been applied to any files
+        encoder: Tokenizer for counting tokens
+        
+    Returns:
+        tuple: 
+            - Formatted file content or None if skipped
+            - Updated total token count
+            - Updated truncated flag
+    """
     try:
         relative_path = file_path.relative_to(project_root)
         relative_time = format_relative_time(mtime)
@@ -283,8 +427,15 @@ async def process_file(file_path: Path, mtime: float, project_root: Path,
         return f"\n# --- Error reading file: {relative_path} ---\n# Error: {e}", total_tokens, truncated
         
 def optimize_content(content: str) -> str:
-    """Optimize file content to reduce token count without losing meaning."""
+    """
+    Optimize file content to reduce token count without losing meaning.
     
+    Args:
+        content: The raw file content
+        
+    Returns:
+        str: The optimized content with reduced token count
+    """
     # Remove duplicate blank lines (more than 2 consecutive newlines)
     content = re.sub(r'\n{3,}', '\n\n', content)
     
@@ -297,31 +448,28 @@ def optimize_content(content: str) -> str:
     return content
 
 
-async def build_output(group_sort_info: List[Dict[str, Any]], 
-                     project_root: Path, 
-                     token_limit: int,
-                     prompt_type: str = 'improvement') -> str:
-    """Optimized output builder using async for file reading operations"""
+async def build_output(
+    directory_groups: list[DirectoryGroup], 
+    project_root: Path, 
+    token_limit: int,
+    prompt_type: str = 'improvement'
+) -> str:
+    """
+    Optimized output builder using async for file reading operations.
+    
+    Args:
+        directory_groups: List of directory groups sorted by recency
+        project_root: Root directory of the project
+        token_limit: Maximum token limit for the output
+        prompt_type: Type of prompt template to use
+        
+    Returns:
+        str: Formatted output with prompt and code files
+    """
     output_parts = []
 
-    # Add minimal project info at the top
-    output_parts.append(f"# CodeSight: {project_root.name} ({datetime.now().strftime('%Y-%m-%d')})")
-
-    # Add compact code structure overview
-    output_parts.append("\n# Files:")
-
-    for group in group_sort_info:
-        relative_dir = group['dir'].relative_to(project_root)
-        dir_name = str(relative_dir) + "/" if str(relative_dir) != '.' else ""
-        
-        # Sort files alphabetically for the overview
-        sorted_files_overview = sorted([f for f, _ in group['files']], key=lambda p: p.name)
-        for file_path in sorted_files_overview:
-            output_parts.append(f"# - {dir_name}{file_path.name}")
-
-    output_parts.append("")
-
-    # Add prompt from template file based on selected prompt type
+    # Add prompt from template file based on selected prompt type first
+    # This makes it easier to paste directly into an LLM interface
     prompt_filename = f"{prompt_type}.md"
     
     # Check if we're running from within .codesight directory
@@ -366,6 +514,21 @@ Each file shows how recently it was modified to help you focus on recent changes
 Please provide your analysis with specific, actionable feedback.
 """
         output_parts.append(prompt_template.strip())
+    
+    # Add minimal project info after the prompt
+    output_parts.append(f"\n# CodeSight: {project_root.name} ({datetime.now().strftime('%Y-%m-%d')})")
+
+    # Add compact code structure overview
+    output_parts.append("\n# Files:")
+
+    for group in directory_groups:
+        relative_dir = group.path.relative_to(project_root)
+        dir_name = str(relative_dir) + "/" if str(relative_dir) != '.' else ""
+        
+        # Sort files alphabetically for the overview
+        sorted_files_overview = sorted(group.files, key=lambda f: f.path.name)
+        for file_metadata in sorted_files_overview:
+            output_parts.append(f"# - {dir_name}{file_metadata.path.name}")
 
     # Add concatenated code files
     output_parts.append("\n# --- Start Code Files ---")
@@ -375,30 +538,30 @@ Please provide your analysis with specific, actionable feedback.
     definition_pattern = re.compile(r'^(def|class)\s+.*:', re.MULTILINE)
 
     # Initialize token encoder once
-    encoder = tiktoken.get_encoding("cl100k_base")  # OpenAI's encoding
+    encoder = tiktoken.get_encoding(DEFAULT_ENCODING)
 
     # Track tokens
     total_tokens = len(encoder.encode("\n".join(output_parts)))
     truncated = False
 
     # Process each directory group
-    for group in group_sort_info:
+    for group in directory_groups:
         # Sort files within group by recency
-        sorted_files_in_group = sorted(group['files'], key=lambda item: item[1], reverse=True)
+        sorted_files_in_group = sorted(group.files, key=lambda item: item.mtime, reverse=True)
 
         # Get relative directory path for header
-        relative_dir = group['dir'].relative_to(project_root)
+        relative_dir = group.path.relative_to(project_root)
         dir_header = f"\n# Directory: {relative_dir}/"
         output_parts.append(dir_header)
 
         # Process files in parallel within this directory
         tasks = [
             process_file(
-                file_path, mtime, project_root, 
+                file_metadata.path, file_metadata.mtime, project_root, 
                 import_pattern, definition_pattern,
                 token_limit, total_tokens, truncated, encoder
             ) 
-            for file_path, mtime in sorted_files_in_group
+            for file_metadata in sorted_files_in_group
         ]
         results = await asyncio.gather(*tasks)
         
@@ -418,7 +581,14 @@ Please provide your analysis with specific, actionable feedback.
 
 
 async def main_async() -> None:
-    """Main async function to run CodeSight."""
+    """
+    Main async function to run CodeSight.
+    
+    Handles command-line argument parsing, file collection, and output generation.
+    
+    Returns:
+        None
+    """
     args = parse_arguments()
 
     # Get project root directory
@@ -454,53 +624,57 @@ async def main_async() -> None:
     dirs_data = await collect_files(project_root, exclusion_spec)
 
     # Sort directories and files by recency
-    group_sort_info = prepare_sorted_groups(dirs_data)
+    directory_groups = prepare_sorted_groups(dirs_data)
 
     # Build output (async) with selected prompt type
-    final_output = await build_output(group_sort_info, project_root, args.token_limit, args.prompt)
+    final_output = await build_output(directory_groups, project_root, args.token_limit, args.prompt)
 
     # Count tokens
-    encoder = tiktoken.get_encoding("cl100k_base")
+    encoder = tiktoken.get_encoding(DEFAULT_ENCODING)
     tokens = len(encoder.encode(final_output))
 
     # Copy to clipboard
     pyperclip.copy(final_output)
     
-    # Save to output file, handling dogfood mode specially
-    output_file_path = args.output_file
+    # Ensure output always goes to .codesight directory
+    output_path = Path(args.output_file)
     
-    # Determine if we're already in the .codesight directory
-    current_dir = Path.cwd().name
-    script_dir = Path(__file__).parent.name
-    in_codesight_dir = current_dir == '.codesight' or script_dir == '.codesight'
+    # If not already an absolute path
+    if not output_path.is_absolute():
+        # If path doesn't already include .codesight/ prefix
+        if not str(output_path).startswith('.codesight/') and output_path.parts[0] != '.codesight':
+            # Add .codesight prefix
+            output_path = Path('.codesight') / output_path
     
-    # If we're in dogfood mode OR already in the .codesight directory
-    if (dogfood_mode or in_codesight_dir) and output_file_path.startswith('.codesight/'):
-        # Remove the .codesight/ prefix to avoid nesting
-        output_file_path = output_file_path[len('.codesight/'):]
+    # Get absolute path
+    if not output_path.is_absolute():
+        output_file = project_root / output_path
+    else:
+        output_file = output_path
     
-    output_file = Path(output_file_path)
-    # Make path absolute if it's not already
-    if not output_file.is_absolute():
-        # If we're running from within .codesight, write to current directory
-        if in_codesight_dir:
-            output_file = Path(output_file_path)
-        else:
-            output_file = Path(__file__).parent / output_file_path
+    print(f"Saving output to: {output_file}")
     
     # Create directory if it doesn't exist
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text(final_output, encoding='utf-8')
 
     # Print summary
-    total_files = sum(len(group['files']) for group in group_sort_info)
+    total_files = sum(len(group.files) for group in directory_groups)
     print(f"CodeSight: Processed {total_files} files ({tokens} tokens)")
     print(f"Content copied to clipboard!")
     print(f"Output saved to {output_file}")
 
 
 def main() -> None:
-    """Entry point that handles the async event loop"""
+    """
+    Entry point function that handles the async event loop.
+    
+    Sets the appropriate event loop policy based on the platform
+    and runs the main async function.
+    
+    Returns:
+        None
+    """
     # Configure asyncio to use the right event loop policy for macOS
     if hasattr(asyncio, 'WindowsSelectorEventLoopPolicy'):
         # Windows-specific event loop policy
