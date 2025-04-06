@@ -1,5 +1,16 @@
 # CodeSight Python Changelog
 
+## v0.1.5 (2025-04-06)
+
+### Added
+- Dependency validation and auto-installation during runtime
+- Improved dependency management for global installations
+
+### Fixed
+- Missing dependency issues in fresh installations
+- Added automatic installation of pyperclip dependency
+- More robust dependency checking before running commands
+
 ## v0.1.4 (2025-04-06)
 
 ### Added

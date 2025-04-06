@@ -165,6 +165,22 @@ def main():
     collect_script = script_dir / 'collect_code.py'
     cmd = f'python {collect_script} {directory} --prompt {prompt_type} {dogfood_flag}'
     
+    # Check for required dependencies before running
+    try:
+        # Verify all dependencies are available before running
+        import_check = ['python', '-c', 'import tiktoken, pathspec, pyperclip, humanize']
+        subprocess.run(import_check, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError:
+        print("Missing required dependencies. Installing now...")
+        try:
+            print("Installing dependencies...")
+            subprocess.run(['pip', 'install', 'tiktoken', 'pathspec', 'pyperclip', 'humanize', 'more-itertools'], 
+                          check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing dependencies: {e}")
+            print("Please run: pip install tiktoken pathspec pyperclip humanize more-itertools")
+            sys.exit(1)
+    
     # Run the command
     print(f"Running: {cmd}")
     os.system(cmd)
@@ -210,20 +226,36 @@ def initialize_codesight(current_dir, script_dir):
     if not codesight_dir.exists():
         codesight_dir.mkdir(exist_ok=True)
     
+    # Install global dependencies required by CodeSight
+    try:
+        print("Checking for required dependencies...")
+        import_check = ['python', '-c', 'import tiktoken, pathspec, pyperclip, humanize']
+        subprocess.run(import_check, capture_output=True, text=True, check=True)
+        print("All required dependencies are installed.")
+    except subprocess.CalledProcessError:
+        print("Missing required dependencies. Installing now...")
+        try:
+            print("Installing dependencies...")
+            subprocess.run(['pip', 'install', 'tiktoken', 'pathspec', 'pyperclip', 'humanize', 'more-itertools', 'pytest', 'openai'], 
+                          check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing dependencies: {e}")
+            print("Please run: pip install tiktoken pathspec pyperclip humanize more-itertools pytest openai")
+    
     # Check if local venv has all required dependencies
     venv_dir = current_dir / '.venv'
     if venv_dir.exists():
         # We have a venv, let's make sure it has the required packages
         try:
-            # Check for the humanize package which seems to be causing issues
-            import_check = ['python', '-c', 'import humanize, tiktoken, pathspec']
+            # Check for all required packages
+            import_check = ['python', '-c', 'import humanize, tiktoken, pathspec, pyperclip']
             subprocess.run(import_check, cwd=current_dir, env=os.environ,
                           capture_output=True, text=True, check=True)
             print("Virtual environment already configured with required dependencies.")
         except subprocess.CalledProcessError:
             # Missing dependencies, install them
             print("Installing required dependencies in the virtual environment...")
-            install_cmd = ['/bin/bash', '-c', f'source {venv_dir}/bin/activate && pip install tiktoken openai pytest typer more-itertools humanize pathspec']
+            install_cmd = ['/bin/bash', '-c', f'source {venv_dir}/bin/activate && pip install tiktoken openai pytest typer more-itertools humanize pathspec pyperclip']
             subprocess.run(install_cmd, cwd=current_dir, env=os.environ, shell=True)
     
     # Check if .gitignore has .codesight exclusion
