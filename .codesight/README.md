@@ -2,124 +2,113 @@
 
 A Python utility for collecting and formatting code for LLMs, optimized for performance on M-series Macs.
 
-## Features
-
-- Smart exclusion patterns based on .gitignore
-- Recency-based directory sorting
-- Token optimization for LLMs with truncation for older files
-- Asyncio, ProcessPoolExecutor, and ThreadPoolExecutor for optimal performance
-- Customizable prompt templates for different analysis types
-
-## Quick Start for Regular Users
+## Quick Start
 
 ```bash
-# Install the cs command globally (one-time setup)
-cd /Users/m/gh/codesight-python
+# Install globally
+git clone https://github.com/mattsilv/codesight-python.git
+cd codesight-python
 .codesight/bin/install.sh
 
-# Setup for your project
+# Initialize in your project
 cd /path/to/your/project
-cs -i                   # Initialize project config
+cs -i
 
-# Then simply use:
-cs                      # Analyze project with one command!
+# Run analysis
+cs
 ```
 
-### Using CodeSight
+## Core Workflows
+
+### Use Case 1: Using CodeSight in Your Projects
 
 ```bash
-cs                      # Analyze current project with improvement prompt
-cs -b "Bug description" # Analyze with bug mode and description
-cs -c                   # Configure settings (global or project-specific)
-cs path/to/project      # Analyze a specific project
-cs --debug              # Show debug information about paths
+# First-time setup in a project
+cd /your/project
+cs -i                   # Initialize project config and dependencies
+
+# Regular usage
+cs                      # Standard analysis with improvement prompt
+cs -b "Description"     # Analyze with bug-fixing prompt
+cs -c                   # Configure settings
+
+# Update CodeSight
+cd /path/to/codesight-python
+git pull
+.codesight/bin/install.sh
 ```
 
-### Features of the `cs` Command
-
-- **Zero-argument operation**: Just type `cs` in your project
-- **Project-specific configuration**: Creates `.codesight-config.json` in your project
-- **Automatic environment management**: Creates and activates virtual environments
-- **Global + project configs**: Project settings override global ones
-- **Quick bug analysis**: `cs -b "Description of the bug"` for immediate debugging
-
-## Output
-
-- Results are saved to `.codesight/llm.txt` in your project
-- Content is also copied to your clipboard automatically
-
-## Manual Installation
-
-If you prefer not to use the provided installation script:
+### Use Case 2: Developing CodeSight (Dogfooding Mode)
 
 ```bash
-# Navigate to your project directory
-cd /path/to/your/project
+# Install for development
+cd /path/to/codesight-python
+.codesight/bin/install.sh
 
-# Create and activate virtual environment with uv
-pip install uv
-uv venv
-source .venv/bin/activate  # On Unix/Mac
-# OR 
-.venv\Scripts\activate     # On Windows
+# Run CodeSight on itself (dogfooding)
+cs-dev                  # Analyze CodeSight with itself
+cs --dogfood            # Alternative method
 
-# Install required dependencies
-uv pip install tiktoken openai typer more-itertools humanize pathspec
+# Test changes
+make edit-to-code.py
+cs-dev --debug          # Test with debugging info
 
-# Run CodeSight manually
-python /path/to/codesight-python/.codesight/collect_code.py .
+# Update to latest version during development
+git pull
+.codesight/bin/install.sh
 ```
 
-## Advanced Usage: Custom Prompts
-
-CodeSight includes different prompt templates:
+### Use Case 3: Uninstall/Reinstall (Clean Slate)
 
 ```bash
-# For general code improvements (default)
-cs --prompt improvement
+# Complete uninstallation
+cd /path/to/codesight-python
+.codesight/bin/uninstall.sh
 
-# For debugging specific issues
-cs --prompt bugfix
+# Verify removal
+which cs                # Should return nothing
+which cs-dev            # Should return nothing
+
+# Fresh installation
+cd /path/to/codesight-python
+.codesight/bin/install.sh
 ```
 
-## Cross-Platform Support
+## Command Reference
 
-Currently optimized for macOS. Future enhancements will include Windows compatibility.
+- `cs` - Run analysis on current project
+- `cs -i` - Initialize CodeSight in current project
+- `cs -b "Bug description"` - Run with bug-fixing prompt
+- `cs -c` - Configure settings
+- `cs --version` - Show version information
+- `cs --debug` - Show debugging information
+- `cs-dev` - Developer mode for CodeSight project
 
----
+## Version Management
 
-## For CodeSight Developers
-
-If you're working on CodeSight itself, please use the dedicated developer mode:
+CodeSight uses semantic versioning. Check your version with:
 
 ```bash
-# Run the developer-specific command
-cd /Users/m/gh/codesight-python
-cs-dev --debug
+cs --version
 ```
 
-This special mode will include the `.codesight` directory (normally excluded) while preventing infinite recursion.
+When a new version is available, you'll see an update notification after running any command.
 
-For more detailed development instructions, see the [CLAUDE.md](CLAUDE.md) file in this repository.
-
-## Directory Structure for Developers
+## Project Structure
 
 ```
-codesight-python/           # Repository root
-├── .codesight/             # Python package directory
-│   ├── collect_code.py     # Main script
-│   ├── bin/                # CLI tools
-│   │   ├── cs              # Main CLI script
-│   │   ├── cs-dev          # Developer mode script
-│   │   ├── cs.py           # Python component of CLI
-│   │   └── install.sh      # Installation script
-│   ├── prompts/            # Prompt templates
-│   │   ├── improvement.md  # Default prompt
-│   │   └── bugfix.md       # Bug-fixing prompt
-│   └── ... other files
-└── README.md, LICENSE, etc.
+.codesight/                # Generated in your project
+├── .venv/                 # Project-specific virtual environment
+├── llm.txt                # Generated output file
+└── .codesight-config.json # Project configuration
 ```
+
+## Common Issues
+
+- **Missing dependencies**: Automatically fixed on run
+- **Nested virtual environments**: Automatically detected and handled
+- **Path issues**: Use `cs --debug` to verify installation paths
 
 ## License
 
-MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see the [LICENSE](../LICENSE) file for details.

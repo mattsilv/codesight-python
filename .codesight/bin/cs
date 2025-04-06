@@ -93,12 +93,25 @@ fi
 
 # Print debugging info if requested
 if [[ "$*" == *"--debug"* ]]; then
-    echo "CodeSight Debug Info:"
+    # Get version from cs.py
+    VERSION=$(grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' "$SCRIPT_DIR/cs.py" 2>/dev/null | tr -d '"' || echo "unknown")
+    
+    echo "CodeSight Debug Info (v$VERSION):"
     echo "  Script directory: $SCRIPT_DIR"
     echo "  CodeSight directory: $CODESIGHT_DIR"
     echo "  Project directory: $PROJECT_DIR"
     echo "  Virtual env: $VENV_DIR"
     echo "  Python script: $SCRIPT_DIR/cs.py"
+    echo "  Installation script: $CODESIGHT_DIR/bin/install.sh"
+    echo "  Uninstall script: $CODESIGHT_DIR/bin/uninstall.sh"
+    echo "  Wrapper path: $(which cs 2>/dev/null || echo "not found")"
+    echo "  Developer wrapper: $(which cs-dev 2>/dev/null || echo "not found")"
+    
+    echo
+    echo "Environment:"
+    echo "  Python version: $(python --version 2>&1)"
+    echo "  Shell: $SHELL"
+    echo "  Current VIRTUAL_ENV: ${VIRTUAL_ENV:-"none"}"
 fi
 
 # Run the CS command
