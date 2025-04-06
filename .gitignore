@@ -13,3 +13,7 @@ build/
 
 # CodeSight output
 .codesight/llm.txt
+
+# Temporary directories
+temp/
+tmp/

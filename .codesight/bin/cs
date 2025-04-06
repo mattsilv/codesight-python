@@ -39,6 +39,23 @@ PROJECT_DIR="$(pwd)"
 VENV_DIR="$PROJECT_DIR/.venv"
 
 # Handle virtual environment
+install_dependencies() {
+    echo "Installing dependencies..."
+    if command -v uv &> /dev/null; then
+        uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
+    else
+        pip install tiktoken openai pytest typer more-itertools humanize pathspec
+    fi
+}
+
+verify_dependencies() {
+    # Verify key dependencies are installed
+    if ! python -c "import humanize, tiktoken, pathspec" &>/dev/null; then
+        echo "Missing required dependencies. Installing now..."
+        install_dependencies
+    fi
+}
+
 if [ ! -d "$VENV_DIR" ]; then
     echo "Setting up virtual environment for project at $PROJECT_DIR..."
     
@@ -53,8 +70,7 @@ if [ ! -d "$VENV_DIR" ]; then
     source "$VENV_DIR/bin/activate"
     
     # Install dependencies
-    echo "Installing dependencies..."
-    uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
+    install_dependencies
 else
     # Check if the user is already in a venv
     if [[ -n "$VIRTUAL_ENV" ]]; then
@@ -70,6 +86,9 @@ else
         # Not in any venv, activate our project venv
         source "$VENV_DIR/bin/activate"
     fi
+    
+    # Always verify dependencies are installed
+    verify_dependencies
 fi
 
 # Print debugging info if requested

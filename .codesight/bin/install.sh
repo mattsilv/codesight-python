@@ -102,7 +102,9 @@ echo "Creating wrapper script at $INSTALL_DIR/cs..."
 cat > "$INSTALL_DIR/cs" << EOF
 #!/bin/bash
 # CodeSight wrapper script
-"$CS_SCRIPT" "\$@"
+# Installation path: $(realpath "$CS_SCRIPT" 2>/dev/null || echo "$CS_SCRIPT")
+# Installation date: $(date)
+"$(realpath "$CS_SCRIPT" 2>/dev/null || echo "$CS_SCRIPT")" "\$@"
 EOF
 chmod +x "$INSTALL_DIR/cs"
 
@@ -111,7 +113,9 @@ echo "Creating developer wrapper at $INSTALL_DIR/cs-dev..."
 cat > "$INSTALL_DIR/cs-dev" << EOF
 #!/bin/bash
 # CodeSight developer mode wrapper script
-"$SCRIPT_DIR/cs-dev" "\$@"
+# Installation path: $(realpath "$SCRIPT_DIR/cs-dev" 2>/dev/null || echo "$SCRIPT_DIR/cs-dev")
+# Installation date: $(date)
+"$(realpath "$SCRIPT_DIR/cs-dev" 2>/dev/null || echo "$SCRIPT_DIR/cs-dev")" "\$@"
 EOF
 chmod +x "$INSTALL_DIR/cs-dev"
 
