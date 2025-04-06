@@ -32,8 +32,8 @@ source .venv/bin/activate  # On Unix/Mac
 # OR 
 .venv\Scripts\activate     # On Windows
 
-# Install dependencies directly (no requirements.txt needed)
-uv pip install tiktoken openai pytest typer more-itertools
+# Install dependencies from the project
+uv pip install -e .
 ```
 
 ## Usage
