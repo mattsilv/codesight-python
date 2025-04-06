@@ -31,11 +31,14 @@ codesight-python/           # Repository root
 └── README.md, LICENSE, etc.
 ```
 
-#### If you're at the repository root (codesight-python/):
+#### Option 1: Install and run from the repository root
 
 ```bash
 # Install uv if needed
 pip install uv
+
+# From repository root (/Users/m/gh/codesight-python/)
+cd /Users/m/gh/codesight-python/
 
 # Create and activate virtual environment
 uv venv
@@ -44,17 +47,20 @@ source .venv/bin/activate  # On Unix/Mac
 .venv\Scripts\activate     # On Windows
 
 # Install required dependencies
-uv pip install tiktoken openai pytest typer more-itertools
+uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
 
 # Run CodeSight from the repository root
 python .codesight/collect_code.py . --dogfood --prompt improvement
 ```
 
-#### If you've navigated into the .codesight/ directory:
+#### Option 2: Install and run from within the .codesight directory (RECOMMENDED)
 
 ```bash
 # Install uv if needed
 pip install uv
+
+# Navigate to the .codesight directory
+cd /Users/m/gh/codesight-python/.codesight/
 
 # Create and activate virtual environment
 uv venv
@@ -63,11 +69,16 @@ source .venv/bin/activate  # On Unix/Mac
 .venv\Scripts\activate     # On Windows
 
 # Install required dependencies
-uv pip install tiktoken openai pytest typer more-itertools
+uv pip install tiktoken openai pytest typer more-itertools humanize pathspec
 
-# Run CodeSight directly (since you're in the directory with collect_code.py)
+# Run CodeSight (use "." to analyze the current directory)
+python collect_code.py . --dogfood --prompt improvement
+
+# OR analyze the parent directory (repository root)
 python collect_code.py .. --dogfood --prompt improvement
 ```
+
+> **Recommended approach**: Option 2 (running from within `.codesight/`) is often cleaner as it avoids nested `.codesight` directories and path resolution issues in dogfood mode.
 
 ## Usage
 
@@ -102,14 +113,18 @@ python .codesight/collect_code.py /path/to/project --prompt bugfix
 To analyze CodeSight itself (useful for development):
 
 ```bash
-# From repository root
-python .codesight/collect_code.py . --dogfood --prompt improvement
+# RECOMMENDED: From within .codesight directory
+cd /Users/m/gh/codesight-python/.codesight/
+python collect_code.py . --dogfood --prompt improvement
 
-# From within .codesight directory
-python collect_code.py .. --dogfood --prompt improvement
+# Alternative: From repository root (but may cause nested .codesight directories)
+cd /Users/m/gh/codesight-python/
+python .codesight/collect_code.py . --dogfood --prompt improvement
 ```
 
 This special mode will include the `.codesight` directory (normally excluded) while preventing infinite recursion.
+
+> **Note**: Running from within the `.codesight` directory is strongly recommended for dogfood mode to avoid issues with nested directories and path resolution. The script has been updated to better handle this case.
 
 ## Output
 

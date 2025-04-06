@@ -260,11 +260,30 @@ async def build_output(group_sort_info: List[Dict[str, Any]],
     # Add prompt from template file based on selected prompt type
     prompt_filename = f"{prompt_type}.md"
     
-    # When in dogfood mode, we need to check the script's directory
-    if Path(__file__).parent.name == '.codesight':
-        prompt_path = Path(__file__).parent / 'prompts' / prompt_filename
-    else:
-        # Standard path for normal usage
+    # Check if we're running from within .codesight directory
+    current_dir = Path.cwd().name
+    script_dir = Path(__file__).parent.name
+    in_codesight_dir = current_dir == '.codesight' or script_dir == '.codesight'
+    
+    # Try multiple possible locations for the prompt file
+    possible_prompt_paths = [
+        # Current directory / prompts (if we're in .codesight)
+        Path('prompts') / prompt_filename,
+        # Script directory / prompts
+        Path(__file__).parent / 'prompts' / prompt_filename,
+        # Project root / .codesight / prompts (standard path)
+        project_root / '.codesight' / 'prompts' / prompt_filename
+    ]
+    
+    # Find the first path that exists
+    prompt_path = None
+    for path in possible_prompt_paths:
+        if path.exists():
+            prompt_path = path
+            break
+    
+    # If no prompt path exists, use the standard path as fallback
+    if not prompt_path:
         prompt_path = project_root / '.codesight' / 'prompts' / prompt_filename
     
     # Use the prompt file if it exists
@@ -341,9 +360,13 @@ async def main_async() -> None:
     # Get project root directory
     project_root = Path(args.directory).resolve()
 
+    # Determine if we're already in the .codesight directory
+    current_dir = Path.cwd().name
+    in_codesight_dir = current_dir == '.codesight'
+    
     # Auto-detect if we're in the codesight project itself
     is_codesight_project = False
-    if project_root.name == "codesight-python" or (project_root / '.codesight').is_dir() and len(list(project_root.glob('*'))) <= 2:
+    if project_root.name == "codesight-python" or in_codesight_dir or (project_root / '.codesight').is_dir() and len(list(project_root.glob('*'))) <= 10:
         is_codesight_project = True
         print("Auto-detected CodeSight project - enabling dogfood mode")
     
@@ -377,16 +400,24 @@ async def main_async() -> None:
     # Save to output file, handling dogfood mode specially
     output_file_path = args.output_file
     
-    # If we're in dogfood mode and the path starts with .codesight/,
-    # don't add another .codesight/ prefix if we're already in that directory
-    if dogfood_mode and Path(__file__).parent.name == '.codesight' and output_file_path.startswith('.codesight/'):
+    # Determine if we're already in the .codesight directory
+    current_dir = Path.cwd().name
+    script_dir = Path(__file__).parent.name
+    in_codesight_dir = current_dir == '.codesight' or script_dir == '.codesight'
+    
+    # If we're in dogfood mode OR already in the .codesight directory
+    if (dogfood_mode or in_codesight_dir) and output_file_path.startswith('.codesight/'):
         # Remove the .codesight/ prefix to avoid nesting
         output_file_path = output_file_path[len('.codesight/'):]
     
     output_file = Path(output_file_path)
     # Make path absolute if it's not already
     if not output_file.is_absolute():
-        output_file = Path(__file__).parent / output_file_path
+        # If we're running from within .codesight, write to current directory
+        if in_codesight_dir:
+            output_file = Path(output_file_path)
+        else:
+            output_file = Path(__file__).parent / output_file_path
     
     # Create directory if it doesn't exist
     output_file.parent.mkdir(parents=True, exist_ok=True)
